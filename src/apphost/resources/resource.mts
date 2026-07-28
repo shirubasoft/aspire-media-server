@@ -18,47 +18,50 @@ export type ArrspireResourcePromise =
   | ContainerResourcePromise
   | ExecutableResourcePromise;
 
-export abstract class ArrspireResource<
+export type ArrspireResource<
   TKind extends string,
   TResource extends ArrspireResourcePromise = ContainerResourcePromise,
-> {
-  protected constructor(
-    readonly kind: TKind,
-    readonly resource: TResource,
-  ) {}
+> = Readonly<{
+  kind: TKind;
+  resource: TResource;
+}>;
 
-  get name(): TKind {
-    return this.kind;
-  }
-
-  protected endpoint(name: string): EndpointReferencePromise {
-    return this.resource.getEndpoint(name);
-  }
-}
-
-export abstract class HttpResource<
+export type HttpResource<
   TKind extends string,
   TResource extends ArrspireResourcePromise = ContainerResourcePromise,
-> extends ArrspireResource<TKind, TResource> {
-  protected constructor(
-    kind: TKind,
-    resource: TResource,
-    private readonly routedHttp?: EndpointReferencePromise,
-  ) {
-    super(kind, resource);
-  }
+> = ArrspireResource<TKind, TResource> &
+  Readonly<{
+    http: EndpointReferencePromise;
+  }>;
 
-  get http(): EndpointReferencePromise {
-    return this.routedHttp ?? this.endpoint("http");
-  }
-}
-
-export abstract class ArrApiResource<
+export type ArrApiResource<
   TKind extends "sonarr" | "radarr" | "lidarr" | "prowlarr",
   TResource extends ArrspireResourcePromise = ContainerResourcePromise,
-> extends HttpResource<TKind, TResource> {
-  abstract readonly apiVersion: "v1" | "v3";
-  abstract readonly configDirectory: string;
+> = HttpResource<TKind, TResource> &
+  Readonly<{
+    apiVersion: "v1" | "v3";
+    configDirectory: string;
+  }>;
+
+export function createResource<
+  const TKind extends string,
+  TResource extends ArrspireResourcePromise,
+>(
+  kind: TKind,
+  resource: TResource,
+): ArrspireResource<TKind, TResource> {
+  return { kind, resource };
+}
+
+export function createHttpResource<
+  const TKind extends string,
+  TResource extends ArrspireResourcePromise,
+>(
+  kind: TKind,
+  resource: TResource,
+  http = resource.getEndpoint("http"),
+): HttpResource<TKind, TResource> {
+  return { kind, resource, http };
 }
 
 export function withLinuxServerDefaults(

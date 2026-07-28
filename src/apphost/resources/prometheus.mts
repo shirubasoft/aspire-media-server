@@ -1,34 +1,32 @@
 import { join } from "node:path";
 
-import type { ContainerResourcePromise } from "../../.aspire/modules/aspire.mjs";
 import {
+  createHttpResource,
   exposeHttp,
-  HttpResource,
+  type HttpResource,
   type ResourceContext,
 } from "./resource.mjs";
 
-export class PrometheusResource extends HttpResource<"prometheus"> {
-  private constructor(resource: ContainerResourcePromise) {
-    super("prometheus", resource);
-  }
+export type PrometheusResource = HttpResource<"prometheus">;
 
-  static add(context: ResourceContext): PrometheusResource {
-    const resource = exposeHttp(
-      context.builder
-        .addContainer(
-          "prometheus",
-          "docker.io/prom/prometheus:latest",
-        )
-        .withVolume("/prometheus", { name: "prometheus-data" })
-        .withBindMount(
-          join(context.paths.data, "prometheus-config"),
-          "/etc/prometheus",
-          { isReadOnly: true },
-        ),
-      9090,
-      "/-/healthy",
-    );
+export function addPrometheus(
+  context: ResourceContext,
+): PrometheusResource {
+  const resource = exposeHttp(
+    context.builder
+      .addContainer(
+        "prometheus",
+        "docker.io/prom/prometheus:latest",
+      )
+      .withVolume("/prometheus", { name: "prometheus-data" })
+      .withBindMount(
+        join(context.paths.data, "prometheus-config"),
+        "/etc/prometheus",
+        { isReadOnly: true },
+      ),
+    9090,
+    "/-/healthy",
+  );
 
-    return new PrometheusResource(resource);
-  }
+  return createHttpResource("prometheus", resource);
 }

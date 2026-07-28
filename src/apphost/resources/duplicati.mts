@@ -1,9 +1,9 @@
 import { join } from "node:path";
 
-import type { ContainerResourcePromise } from "../../.aspire/modules/aspire.mjs";
 import {
+  createHttpResource,
   exposeHttp,
-  HttpResource,
+  type HttpResource,
   type ResourceContext,
 } from "./resource.mjs";
 
@@ -19,34 +19,35 @@ const backupSources = [
   "gluetun",
 ] as const;
 
-export class DuplicatiResource extends HttpResource<"duplicati"> {
-  private constructor(resource: ContainerResourcePromise) {
-    super("duplicati", resource);
+export type DuplicatiResource = HttpResource<"duplicati">;
+
+export function addDuplicati(
+  context: ResourceContext,
+): DuplicatiResource {
+  let resource = context.builder
+    .addContainer("duplicati", "docker.io/duplicati/duplicati:latest")
+    .withEnvironment("TZ", context.parameters.timezone)
+    .withEnvironment(
+      "DUPLICATI__SETTINGS_ENCRYPTION_KEY",
+      context.parameters.duplicatiEncryptionKey,
+    )
+    .withEnvironment(
+      "DUPLICATI__WEBSERVICE_PASSWORD",
+      context.parameters.duplicatiWebPassword,
+    )
+    .withBindMount(join(context.paths.data, "duplicati"), "/data")
+    .withBindMount(join(context.paths.data, "backups"), "/backups");
+
+  for (const source of backupSources) {
+    resource = resource.withBindMount(
+      join(context.paths.data, source),
+      `/source/${source}`,
+      { isReadOnly: true },
+    );
   }
 
-  static add(context: ResourceContext): DuplicatiResource {
-    let resource = context.builder
-      .addContainer("duplicati", "docker.io/duplicati/duplicati:latest")
-      .withEnvironment("TZ", context.parameters.timezone)
-      .withEnvironment(
-        "DUPLICATI__SETTINGS_ENCRYPTION_KEY",
-        context.parameters.duplicatiEncryptionKey,
-      )
-      .withEnvironment(
-        "DUPLICATI__WEBSERVICE_PASSWORD",
-        context.parameters.duplicatiWebPassword,
-      )
-      .withBindMount(join(context.paths.data, "duplicati"), "/data")
-      .withBindMount(join(context.paths.data, "backups"), "/backups");
-
-    for (const source of backupSources) {
-      resource = resource.withBindMount(
-        join(context.paths.data, source),
-        `/source/${source}`,
-        { isReadOnly: true },
-      );
-    }
-
-    return new DuplicatiResource(exposeHttp(resource, 8200, "/"));
-  }
+  return createHttpResource(
+    "duplicati",
+    exposeHttp(resource, 8200, "/"),
+  );
 }

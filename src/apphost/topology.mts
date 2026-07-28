@@ -1,53 +1,73 @@
 import type { DistributedApplicationBuilder } from "../.aspire/modules/aspire.mjs";
 import type { ArrspireParameters } from "./parameters.mjs";
 import type { ArrspirePaths } from "./paths.mjs";
-import { AcceptanceResource } from "./resources/acceptance.mjs";
-import { BazarrResource } from "./resources/bazarr.mjs";
-import { BootstrapResource } from "./resources/bootstrap.mjs";
-import { DiunResource } from "./resources/diun.mjs";
-import { DuplicatiResource } from "./resources/duplicati.mjs";
-import { Fail2banResource } from "./resources/fail2ban.mjs";
-import { GluetunResource } from "./resources/gluetun.mjs";
-import { GrafanaResource } from "./resources/grafana.mjs";
-import { JellyfinResource } from "./resources/jellyfin.mjs";
-import { JellyseerrResource } from "./resources/jellyseerr.mjs";
-import { LidarrResource } from "./resources/lidarr.mjs";
-import { PrometheusResource } from "./resources/prometheus.mjs";
-import { ProwlarrResource } from "./resources/prowlarr.mjs";
-import { QBittorrentResource } from "./resources/qbittorrent.mjs";
-import { RadarrResource } from "./resources/radarr.mjs";
-import { ReconcilerResource } from "./resources/reconciler.mjs";
-import { RecyclarrResource } from "./resources/recyclarr.mjs";
 import {
+  addAcceptance,
+  addBazarr,
+  addBootstrap,
+  addDiun,
+  addDuplicati,
+  addFail2ban,
+  addGluetun,
+  addGrafana,
+  addJellyfin,
+  addJellyseerr,
+  addLidarr,
+  addPrometheus,
+  addProwlarr,
+  addQBittorrent,
+  addRadarr,
+  addReconciler,
+  addRecyclarr,
+  addSonarr,
+  addTdarr,
+  addTraefik,
+  type AcceptanceResource,
+  type BazarrResource,
+  type BootstrapResource,
+  type DiunResource,
+  type DuplicatiResource,
+  type Fail2banResource,
+  type GluetunResource,
+  type GrafanaResource,
+  type JellyfinResource,
+  type JellyseerrResource,
+  type LidarrResource,
+  type PrometheusResource,
+  type ProwlarrResource,
+  type QBittorrentResource,
+  type RadarrResource,
+  type ReconcilerResource,
+  type RecyclarrResource,
   type ResourceContext,
+  type SonarrResource,
+  type TdarrResource,
+  type TraefikResource,
   withComposeRestart,
-} from "./resources/resource.mjs";
-import { SonarrResource } from "./resources/sonarr.mjs";
-import { TdarrResource } from "./resources/tdarr.mjs";
-import { TraefikResource } from "./resources/traefik.mjs";
+} from "./resources/index.mjs";
 
-export interface ArrspireTopology {
-  readonly gluetun: GluetunResource;
-  readonly qbittorrent: QBittorrentResource;
-  readonly sonarr: SonarrResource;
-  readonly radarr: RadarrResource;
-  readonly lidarr: LidarrResource;
-  readonly prowlarr: ProwlarrResource;
-  readonly bazarr: BazarrResource;
-  readonly jellyfin: JellyfinResource;
-  readonly jellyseerr: JellyseerrResource;
-  readonly recyclarr: RecyclarrResource;
-  readonly duplicati: DuplicatiResource;
-  readonly tdarr: TdarrResource;
-  readonly traefik: TraefikResource;
-  readonly fail2ban: Fail2banResource;
-  readonly diun: DiunResource;
-  readonly prometheus: PrometheusResource;
-  readonly grafana: GrafanaResource;
-  readonly bootstrap: BootstrapResource;
-  readonly reconciler: ReconcilerResource;
-  readonly acceptance?: AcceptanceResource;
-}
+export type ArrspireTopology = Readonly<{
+  gluetun: GluetunResource;
+  qbittorrent: QBittorrentResource;
+  sonarr: SonarrResource;
+  radarr: RadarrResource;
+  lidarr: LidarrResource;
+  prowlarr: ProwlarrResource;
+  bazarr: BazarrResource;
+  jellyfin: JellyfinResource;
+  jellyseerr: JellyseerrResource;
+  recyclarr: RecyclarrResource;
+  duplicati: DuplicatiResource;
+  tdarr: TdarrResource;
+  traefik: TraefikResource;
+  fail2ban: Fail2banResource;
+  diun: DiunResource;
+  prometheus: PrometheusResource;
+  grafana: GrafanaResource;
+  bootstrap: BootstrapResource;
+  reconciler: ReconcilerResource;
+  acceptance?: AcceptanceResource;
+}>;
 
 export async function addArrspireTopology(
   builder: DistributedApplicationBuilder,
@@ -62,24 +82,24 @@ export async function addArrspireTopology(
     isRunMode,
   };
 
-  const gluetun = await GluetunResource.add(context);
-  const qbittorrent = await QBittorrentResource.add(context, gluetun);
-  const prowlarr = await ProwlarrResource.add(context, gluetun);
+  const gluetun = await addGluetun(context);
+  const qbittorrent = await addQBittorrent(context, gluetun);
+  const prowlarr = await addProwlarr(context, gluetun);
 
-  const sonarr = SonarrResource.add(context);
-  const radarr = RadarrResource.add(context);
-  const lidarr = LidarrResource.add(context);
-  const bazarr = BazarrResource.add(context);
-  const jellyfin = JellyfinResource.add(context);
-  const jellyseerr = JellyseerrResource.add(context);
-  const recyclarr = RecyclarrResource.add(context);
-  const duplicati = DuplicatiResource.add(context);
-  const tdarr = TdarrResource.add(context);
-  const traefik = TraefikResource.add(context);
-  const fail2ban = await Fail2banResource.add(context, traefik);
-  const diun = DiunResource.add(context);
-  const prometheus = PrometheusResource.add(context);
-  const grafana = GrafanaResource.add(context, prometheus);
+  const sonarr = addSonarr(context);
+  const radarr = addRadarr(context);
+  const lidarr = addLidarr(context);
+  const bazarr = addBazarr(context);
+  const jellyfin = addJellyfin(context);
+  const jellyseerr = addJellyseerr(context);
+  const recyclarr = addRecyclarr(context);
+  const duplicati = addDuplicati(context);
+  const tdarr = addTdarr(context);
+  const traefik = addTraefik(context);
+  const fail2ban = await addFail2ban(context, traefik);
+  const diun = addDiun(context);
+  const prometheus = addPrometheus(context);
+  const grafana = addGrafana(context, prometheus);
 
   const applicationEndpoints = {
     sonarr: sonarr.http,
@@ -92,7 +112,7 @@ export async function addArrspireTopology(
     qbittorrent: qbittorrent.http,
   };
 
-  const bootstrap = BootstrapResource.add(context, {
+  const bootstrap = addBootstrap(context, {
     ...applicationEndpoints,
     prometheus: prometheus.http,
     grafana: grafana.http,
@@ -139,7 +159,7 @@ export async function addArrspireTopology(
     gluetunProxy: gluetun.httpProxy,
     ...applicationEndpoints,
   };
-  const reconciler = ReconcilerResource.add(
+  const reconciler = addReconciler(
     context,
     reconciliationEndpoints,
     reconciledResources,
@@ -149,7 +169,7 @@ export async function addArrspireTopology(
 
   const acceptance =
     process.env.ARRSPIRE_E2E === "true"
-      ? AcceptanceResource.add(
+      ? addAcceptance(
           context,
           reconciliationEndpoints,
           reconciler,

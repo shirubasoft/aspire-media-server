@@ -1,26 +1,27 @@
-import type { ContainerResourcePromise } from "../../.aspire/modules/aspire.mjs";
 import { addArrApp } from "./arr-app.mjs";
 import {
-  ArrApiResource,
+  type ArrApiResource,
+  createHttpResource,
   type ResourceContext,
 } from "./resource.mjs";
 
-export class SonarrResource extends ArrApiResource<"sonarr"> {
-  readonly apiVersion = "v3" as const;
-  readonly configDirectory = "/data/sonarr";
+export type SonarrResource = ArrApiResource<"sonarr"> &
+  Readonly<{
+    apiVersion: "v3";
+    configDirectory: "/data/sonarr";
+  }>;
 
-  private constructor(resource: ContainerResourcePromise) {
-    super("sonarr", resource);
-  }
+export function addSonarr(context: ResourceContext): SonarrResource {
+  const resource = addArrApp(context, {
+    name: "sonarr",
+    image: "ghcr.io/linuxserver/sonarr:latest",
+    port: 8989,
+    mediaDirectory: "tv",
+  });
 
-  static add(context: ResourceContext): SonarrResource {
-    return new SonarrResource(
-      addArrApp(context, {
-        name: "sonarr",
-        image: "ghcr.io/linuxserver/sonarr:latest",
-        port: 8989,
-        mediaDirectory: "tv",
-      }),
-    );
-  }
+  return {
+    ...createHttpResource("sonarr", resource),
+    apiVersion: "v3",
+    configDirectory: "/data/sonarr",
+  };
 }

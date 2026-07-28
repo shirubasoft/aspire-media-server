@@ -3,10 +3,10 @@ import type {
   EndpointReferencePromise,
   ExecutableResourcePromise,
 } from "../../.aspire/modules/aspire.mjs";
-import { GluetunResource } from "./gluetun.mjs";
-import {
+import type { GluetunResource } from "./gluetun.mjs";
+import type {
   HttpResource,
-  type ResourceContext,
+  ResourceContext,
 } from "./resource.mjs";
 
 interface VpnProcessOptions {
@@ -16,17 +16,25 @@ interface VpnProcessOptions {
   readonly mounts: readonly (readonly [source: string, target: string])[];
 }
 
-export abstract class VpnRoutedResource<
+export type VpnRoutedResource<
   TKind extends "qbittorrent" | "prowlarr",
-> extends HttpResource<TKind, ContainerResourcePromise | ExecutableResourcePromise> {
-  protected constructor(
-    kind: TKind,
-    resource: ContainerResourcePromise | ExecutableResourcePromise,
-    readonly composeResource: ContainerResourcePromise,
-    http: EndpointReferencePromise,
-  ) {
-    super(kind, resource, http);
-  }
+> = HttpResource<
+  TKind,
+  ContainerResourcePromise | ExecutableResourcePromise
+> &
+  Readonly<{
+    composeResource: ContainerResourcePromise;
+  }>;
+
+export function createVpnRoutedResource<
+  const TKind extends "qbittorrent" | "prowlarr",
+>(
+  kind: TKind,
+  resource: ContainerResourcePromise | ExecutableResourcePromise,
+  composeResource: ContainerResourcePromise,
+  http: EndpointReferencePromise,
+): VpnRoutedResource<TKind> {
+  return { kind, resource, composeResource, http };
 }
 
 export async function configureComposeVpnNetwork(
@@ -35,7 +43,7 @@ export async function configureComposeVpnNetwork(
 ): Promise<void> {
   await composeResource.publishAsDockerComposeService(
     async (_compose, service) => {
-      await service.networkMode.set(`service:${gluetun.name}`);
+      await service.networkMode.set(`service:${gluetun.kind}`);
       await service.ports.clear();
       await service.networks.clear();
       await service.restart.set("unless-stopped");

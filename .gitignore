@@ -6,6 +6,11 @@
 # dotenv files
 .env
 
+# Arrspire runtime and deployment state
+data/
+data.pre-typescript-e2e-*/
+src/aspire-output/
+
 # User-specific files
 *.rsuser
 *.suo

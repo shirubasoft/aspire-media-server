@@ -1,0 +1,6 @@
+.aspire
+dist
+node_modules
+aspire-output
+data
+*.log

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
 import { cp, mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, sep } from "node:path";
@@ -9,6 +10,17 @@ import { promisify } from "node:util";
 
 const execute = promisify(execFile);
 const projectDirectory = process.cwd();
+type ContainerEngine = "docker" | "podman";
+
+function containerEngine(): ContainerEngine {
+  const configured = process.env.ARRSPIRE_CONTAINER_ENGINE;
+  if (configured === "docker" || configured === "podman") {
+    return configured;
+  }
+  return existsSync("/var/run/docker.sock") ? "docker" : "podman";
+}
+
+const engine = containerEngine();
 
 interface RunningAppHost {
   readonly directory: string;
@@ -48,7 +60,7 @@ async function removeTestContainers(instanceId: string): Promise<void> {
   for (const service of ["qbittorrent", "prowlarr", "gluetun"]) {
     try {
       await execute(
-        "podman",
+        engine,
         ["rm", "--force", `arrspire-${instanceId}-${service}`],
         { cwd: projectDirectory, timeout: 30_000 },
       );
@@ -184,15 +196,32 @@ async function removeTestRoot(root: string): Promise<void> {
     ) {
       throw error;
     }
-    // Rootless Podman can represent an image's internal service user through
-    // a subordinate host UID. Widen only this validated temporary tree, then
-    // let Node perform the actual cleanup.
+    // Container images can create directories owned by internal service users.
+    // Widen only this validated temporary data tree, then let Node remove it.
     try {
-      await execute(
-        "podman",
-        ["unshare", "chmod", "-R", "a+rwx", join(root, "data")],
-        { cwd: projectDirectory, timeout: 30_000 },
-      );
+      if (engine === "podman") {
+        await execute(
+          "podman",
+          ["unshare", "chmod", "-R", "a+rwx", join(root, "data")],
+          { cwd: projectDirectory, timeout: 30_000 },
+        );
+      } else {
+        await execute(
+          "docker",
+          [
+            "run",
+            "--rm",
+            "--volume",
+            `${join(root, "data")}:/cleanup`,
+            "alpine:3.22",
+            "chmod",
+            "-R",
+            "a+rwx",
+            "/cleanup",
+          ],
+          { cwd: projectDirectory, timeout: 60_000 },
+        );
+      }
     } catch {
       // Files can disappear while the container runtime finishes teardown.
     }

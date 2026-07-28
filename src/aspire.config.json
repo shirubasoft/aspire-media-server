@@ -1,0 +1,19 @@
+{
+  "appHost": {
+    "path": "apphost.mts",
+    "language": "typescript/nodejs"
+  },
+  "sdk": {
+    "version": "13.4.6"
+  },
+  "channel": "stable",
+  "profiles": {
+    "https": {
+      "applicationUrl": "https://arrspire.dev.localhost:17283;http://arrspire.dev.localhost:15103",
+      "environmentVariables": {
+        "ASPIRE_DASHBOARD_OTLP_ENDPOINT_URL": "https://arrspire.dev.localhost:21165",
+        "ASPIRE_RESOURCE_SERVICE_ENDPOINT_URL": "https://arrspire.dev.localhost:22035"
+      }
+    }
+  }
+}

@@ -18,6 +18,11 @@ import { log } from "./log.js";
 import { ProwlarrClient } from "./prowlarr.js";
 import { QBittorrentClient } from "./qbittorrent.js";
 import { reconcileRecyclarr } from "./recyclarr.js";
+import {
+  type ReconciliationResult,
+  writeReconciliationStatus,
+} from "./status.js";
+import { optionalCredentialStates } from "./validation.js";
 
 interface ServiceUrls {
   readonly gluetunProxy: string;
@@ -43,6 +48,39 @@ async function integration(
     throw new Error(`${name} reconciliation failed: ${message}`, {
       cause: error,
     });
+  }
+}
+
+interface IntegrationOperation {
+  readonly name: string;
+  readonly operation: () => Promise<void>;
+}
+
+async function runRequiredStage(
+  results: ReconciliationResult[],
+  operations: readonly IntegrationOperation[],
+): Promise<void> {
+  const stageResults = await Promise.all(
+    operations.map(async ({ name, operation }): Promise<ReconciliationResult> => {
+      try {
+        await integration(name, operation);
+        return { name, required: true, status: "ready" };
+      } catch (error) {
+        return {
+          name,
+          required: true,
+          status: "failed",
+          reason: error instanceof Error ? error.message : String(error),
+        };
+      }
+    }),
+  );
+  results.push(...stageResults);
+  const failures = stageResults.filter((result) => result.status === "failed");
+  if (failures.length > 0) {
+    throw new Error(
+      failures.map((failure) => failure.reason ?? failure.name).join("; "),
+    );
   }
 }
 
@@ -73,7 +111,7 @@ async function waitForServices(urls: ServiceUrls): Promise<void> {
   ]);
 }
 
-export async function reconcile(): Promise<void> {
+async function reconcileCore(results: ReconciliationResult[]): Promise<void> {
   const urls = loadServiceUrls();
   const jellyfinUser = required("JELLYFIN_ADMIN_USER");
   const jellyfinPassword = required("JELLYFIN_ADMIN_PASSWORD");
@@ -117,18 +155,25 @@ export async function reconcile(): Promise<void> {
     required("JELLYFIN_SERVER_NAME"),
     required("JELLYFIN_LANGUAGE"),
   );
-  await Promise.all([
-    qbittorrent.reconcile(urls.gluetunProxy),
-    jellyfin.reconcile({
-      bazarrUrl: urls.bazarr,
-      bazarrApiKey: bazarrKey,
-      jellyseerrUrl: urls.jellyseerr,
-      jellyseerrApiKey: jellyseerrKey,
-      sonarrUrl: urls.sonarr,
-      sonarrApiKey: sonarrKey,
-      radarrUrl: urls.radarr,
-      radarrApiKey: radarrKey,
-    }),
+  await runRequiredStage(results, [
+    {
+      name: "qbittorrent",
+      operation: () => qbittorrent.reconcile(urls.gluetunProxy),
+    },
+    {
+      name: "jellyfin",
+      operation: () =>
+        jellyfin.reconcile({
+          bazarrUrl: urls.bazarr,
+          bazarrApiKey: bazarrKey,
+          jellyseerrUrl: urls.jellyseerr,
+          jellyseerrApiKey: jellyseerrKey,
+          sonarrUrl: urls.sonarr,
+          sonarrApiKey: sonarrKey,
+          radarrUrl: urls.radarr,
+          radarrApiKey: radarrKey,
+        }),
+    },
   ]);
 
   const arrClients = [
@@ -166,17 +211,18 @@ export async function reconcile(): Promise<void> {
       }),
     },
   ] as const;
-  await Promise.all(
-    arrClients.map(({ name, client }) =>
-      integration(name, () =>
+  await runRequiredStage(
+    results,
+    arrClients.map(({ name, client }) => ({
+      name,
+      operation: () =>
         client.reconcile(
           urls.qbittorrent,
           qbittorrentPassword,
           minimumSeeders,
           useOriginalTitle,
         ),
-      ),
-    ),
+    })),
   );
 
   const prowlarr = new ProwlarrClient(urls.prowlarr, prowlarrKey);
@@ -187,60 +233,138 @@ export async function reconcile(): Promise<void> {
     jellyfinUser,
     jellyfinPassword,
   );
-  await Promise.all([
-    integration("prowlarr", () =>
-      prowlarr.reconcile(urls.gluetunProxy, [
-        {
-          name: "Sonarr",
-          url: urls.sonarr,
-          apiKey: sonarrKey,
-          categories: [5000, 5010, 5020, 5030, 5040, 5045, 5050],
-        },
-        {
-          name: "Radarr",
-          url: urls.radarr,
-          apiKey: radarrKey,
-          categories: [2000, 2010, 2020, 2030, 2040, 2045, 2050, 2060],
-        },
-        {
-          name: "Lidarr",
-          url: urls.lidarr,
-          apiKey: lidarrKey,
-          categories: [3000, 3010, 3020, 3030, 3040],
-        },
-      ]),
-    ),
-    integration("bazarr", () =>
-      bazarr.reconcile(
-        urls.sonarr,
-        sonarrKey,
-        urls.radarr,
-        radarrKey,
-        languages,
-        {
-          opensubtitlesComUser: optional("OPENSUBTITLESCOM_USER"),
-          opensubtitlesComPassword: optional("OPENSUBTITLESCOM_PASSWORD"),
-          opensubtitlesOrgUser: optional("OPENSUBTITLESORG_USER"),
-          opensubtitlesOrgPassword: optional("OPENSUBTITLESORG_PASSWORD"),
-          legendasDivxUser: optional("LEGENDASDIVX_USER"),
-          legendasDivxPassword: optional("LEGENDASDIVX_PASSWORD"),
-          legendasNetUser: optional("LEGENDASNET_USER"),
-          legendasNetPassword: optional("LEGENDASNET_PASSWORD"),
-        },
-      ),
-    ),
-    integration("jellyseerr", () =>
-      jellyseerr.reconcile(
-        urls.sonarr,
-        sonarrKey,
-        urls.radarr,
-        radarrKey,
-      ),
-    ),
-    integration("recyclarr", () =>
-      reconcileRecyclarr(urls.sonarr, sonarrKey, urls.radarr, radarrKey),
-    ),
+  let prowlarrOptionalResults: readonly ReconciliationResult[] = [];
+  await runRequiredStage(results, [
+    {
+      name: "prowlarr",
+      operation: async () => {
+        const indexers = await prowlarr.reconcile(urls.gluetunProxy, [
+          {
+            name: "Sonarr",
+            url: urls.sonarr,
+            apiKey: sonarrKey,
+            categories: [5000, 5010, 5020, 5030, 5040, 5045, 5050],
+          },
+          {
+            name: "Radarr",
+            url: urls.radarr,
+            apiKey: radarrKey,
+            categories: [2000, 2010, 2020, 2030, 2040, 2045, 2050, 2060],
+          },
+          {
+            name: "Lidarr",
+            url: urls.lidarr,
+            apiKey: lidarrKey,
+            categories: [3000, 3010, 3020, 3030, 3040],
+          },
+        ]);
+        prowlarrOptionalResults = indexers.map((indexer) => ({
+          name: `public-indexer:${indexer.name}`,
+          required: false,
+          status: indexer.status,
+          ...(indexer.reason === undefined
+            ? {}
+            : { reason: indexer.reason }),
+        }));
+      },
+    },
+    {
+      name: "bazarr",
+      operation: () =>
+        bazarr.reconcile(
+          urls.sonarr,
+          sonarrKey,
+          urls.radarr,
+          radarrKey,
+          languages,
+          {
+            opensubtitlesComUser: optional("OPENSUBTITLESCOM_USER"),
+            opensubtitlesComPassword: optional("OPENSUBTITLESCOM_PASSWORD"),
+            opensubtitlesOrgUser: optional("OPENSUBTITLESORG_USER"),
+            opensubtitlesOrgPassword: optional("OPENSUBTITLESORG_PASSWORD"),
+            legendasDivxUser: optional("LEGENDASDIVX_USER"),
+            legendasDivxPassword: optional("LEGENDASDIVX_PASSWORD"),
+            legendasNetUser: optional("LEGENDASNET_USER"),
+            legendasNetPassword: optional("LEGENDASNET_PASSWORD"),
+          },
+        ),
+    },
+    {
+      name: "jellyseerr",
+      operation: () =>
+        jellyseerr.reconcile(
+          urls.sonarr,
+          sonarrKey,
+          urls.radarr,
+          radarrKey,
+        ),
+    },
+    {
+      name: "recyclarr",
+      operation: () =>
+        reconcileRecyclarr(
+          urls.sonarr,
+          sonarrKey,
+          urls.radarr,
+          radarrKey,
+        ),
+    },
   ]);
+  results.push(...prowlarrOptionalResults);
 
   log.info("All Arrspire integrations are reconciled");
+}
+
+function optionalResults(
+  completed: boolean,
+): readonly ReconciliationResult[] {
+  return optionalCredentialStates(process.env).map((provider) =>
+    provider.configured
+      ? {
+          name: `subtitle-provider:${provider.name}`,
+          required: false,
+          status: completed ? "ready" : "failed",
+          ...(!completed
+            ? { reason: "Core reconciliation did not complete" }
+            : {}),
+        }
+      : {
+          name: `subtitle-provider:${provider.name}`,
+          required: false,
+          status: "skipped",
+          ...(provider.reason === undefined ? {} : { reason: provider.reason }),
+        },
+  );
+}
+
+export async function reconcile(): Promise<void> {
+  const results: ReconciliationResult[] = [];
+  try {
+    await reconcileCore(results);
+    results.push(...optionalResults(true));
+    const summary = await writeReconciliationStatus(results);
+    log.info("Reconciliation summary", {
+      status: summary.status,
+      ready: results.filter((result) => result.status === "ready").length,
+      skipped: results.filter((result) => result.status === "skipped").length,
+      failed: results.filter((result) => result.status === "failed").length,
+      results,
+    });
+  } catch (error) {
+    if (!results.some((result) => result.status === "failed")) {
+      results.push({
+        name: "control-plane",
+        required: true,
+        status: "failed",
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
+    results.push(...optionalResults(false));
+    const summary = await writeReconciliationStatus(results);
+    log.error("Reconciliation summary", {
+      status: summary.status,
+      results,
+    });
+    throw error;
+  }
 }

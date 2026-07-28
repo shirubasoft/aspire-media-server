@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { images } from "../images.mjs";
 
 import {
   createHttpResource,
@@ -16,7 +17,7 @@ export function addPrometheus(
     context.builder
       .addContainer(
         "prometheus",
-        "docker.io/prom/prometheus:latest",
+        images.prometheus,
       )
       .withVolume("/prometheus", { name: "prometheus-data" })
       .withBindMount(

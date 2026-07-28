@@ -20,6 +20,8 @@ export interface ArrspireParameters {
   readonly useOriginalTitle: ParameterResourcePromise;
   readonly minimumSeeders: ParameterResourcePromise;
   readonly traefikDomain: ParameterResourcePromise;
+  readonly ingressAdminUser: ParameterResourcePromise;
+  readonly ingressAdminPassword: ParameterResourcePromise;
   readonly opensubtitlesComUser: ParameterResourcePromise;
   readonly opensubtitlesComPassword: ParameterResourcePromise;
   readonly opensubtitlesOrgUser: ParameterResourcePromise;
@@ -113,6 +115,15 @@ export function addArrspireParameters(
       value: "localhost",
       publishValueAsDefault: true,
     }),
+    ingressAdminUser: builder.addParameter("ingress-admin-user", {
+      value: "admin",
+      publishValueAsDefault: true,
+    }),
+    ingressAdminPassword: builder.addParameterWithGeneratedValue(
+      "ingress-admin-password",
+      generatedSecret,
+      { secret: true, persist: true },
+    ),
     opensubtitlesComUser: builder.addParameter("opensubtitlescom-user", {
       value: "",
       publishValueAsDefault: true,

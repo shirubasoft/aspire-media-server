@@ -114,6 +114,8 @@ export async function addArrspireTopology(
 
   const bootstrap = addBootstrap(context, {
     ...applicationEndpoints,
+    duplicati: duplicati.http,
+    tdarr: tdarr.webUi,
     prometheus: prometheus.http,
     grafana: grafana.http,
   });
@@ -157,6 +159,7 @@ export async function addArrspireTopology(
   ];
   const reconciliationEndpoints = {
     gluetunProxy: gluetun.httpProxy,
+    ingress: traefik.https,
     ...applicationEndpoints,
   };
   const reconciler = addReconciler(

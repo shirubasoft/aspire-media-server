@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { images } from "../images.mjs";
 
 import {
   createHttpResource,
@@ -16,7 +17,7 @@ export function addJellyfin(
     context.builder
       .addContainer(
         "jellyfin",
-        "docker.io/jellyfin/jellyfin:10.11.11",
+        images.jellyfin,
       )
       .withEnvironment("TZ", context.parameters.timezone)
       .withBindMount(join(context.paths.data, "jellyfin"), "/config")

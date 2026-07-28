@@ -1,0 +1,41 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^src/apphost/images\\.mts$/"],
+      "matchStrings": [
+        "\"(?<depName>(?:[a-z0-9.-]+(?::\\\\d+)?/)?[a-z0-9._/-]+):(?<currentValue>[A-Za-z0-9._-]+)@(?<currentDigest>sha256:[a-f0-9]{64})\""
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^src/apphost/images\\.mts$/"],
+      "matchStrings": [
+        "aspireDashboardDigest\\s*=\\s*\"(?<currentDigest>sha256:[a-f0-9]{64})\""
+      ],
+      "depNameTemplate": "mcr.microsoft.com/dotnet/nightly/aspire-dashboard",
+      "currentValueTemplate": "latest",
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Review media-stack image compatibility as one change",
+      "matchDatasources": ["docker"],
+      "groupName": "reviewed container image updates",
+      "automerge": false,
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "Prioritize security fixes without bypassing compatibility checks",
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["patch", "digest"],
+      "dependencyDashboardApproval": false
+    }
+  ]
+}

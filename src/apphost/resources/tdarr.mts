@@ -1,8 +1,10 @@
 import { join } from "node:path";
+import { images } from "../images.mjs";
 
 import type { EndpointReferencePromise } from "../../.aspire/modules/aspire.mjs";
 import {
   type ArrspireResource,
+  directHostAccessEnabled,
   type ResourceContext,
 } from "./resource.mjs";
 
@@ -13,8 +15,9 @@ export type TdarrResource = ArrspireResource<"tdarr"> &
   }>;
 
 export function addTdarr(context: ResourceContext): TdarrResource {
+  const directAccess = directHostAccessEnabled();
   const resource = context.builder
-    .addContainer("tdarr", "ghcr.io/haveagitgat/tdarr:latest")
+    .addContainer("tdarr", images.tdarr)
     .withEnvironment("TZ", context.parameters.timezone)
     .withEnvironment("PUID", process.getuid?.().toString() ?? "1000")
     .withEnvironment("PGID", process.getgid?.().toString() ?? "1000")
@@ -43,21 +46,24 @@ export function addTdarr(context: ResourceContext): TdarrResource {
       "/temp",
     )
     .withBindMount(context.paths.media, "/media")
-    .withHttpEndpoint({
+    .withEndpoint({
       name: "webui",
-      port: 8265,
+      scheme: "http",
       targetPort: 8265,
+      isExternal: directAccess,
+      ...(directAccess ? { port: 8265 } : {}),
     })
-    .withHttpEndpoint({
+    .withEndpoint({
       name: "server",
-      port: 8266,
+      scheme: "http",
       targetPort: 8266,
+      isExternal: directAccess,
+      ...(directAccess ? { port: 8266 } : {}),
     })
     .withHttpHealthCheck({
       endpointName: "webui",
       path: "/api/v2/status",
-    })
-    .withExternalHttpEndpoints();
+    });
 
   return {
     kind: "tdarr",

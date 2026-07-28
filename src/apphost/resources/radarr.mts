@@ -1,4 +1,5 @@
 import { addArrApp } from "./arr-app.mjs";
+import { images } from "../images.mjs";
 import {
   type ArrApiResource,
   createHttpResource,
@@ -14,7 +15,7 @@ export type RadarrResource = ArrApiResource<"radarr"> &
 export function addRadarr(context: ResourceContext): RadarrResource {
   const resource = addArrApp(context, {
     name: "radarr",
-    image: "ghcr.io/linuxserver/radarr:latest",
+    image: images.radarr,
     port: 7878,
     mediaDirectory: "movies",
   });

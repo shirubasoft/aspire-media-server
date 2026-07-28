@@ -1,6 +1,7 @@
 import { join } from "node:path";
 
 import type { GluetunResource } from "./gluetun.mjs";
+import { images } from "../images.mjs";
 import {
   type ResourceContext,
   exposeHttp,
@@ -13,7 +14,7 @@ import {
   type VpnRoutedResource,
 } from "./vpn-routed.mjs";
 
-const image = "lscr.io/linuxserver/prowlarr:latest";
+const image = images.prowlarr;
 
 export type ProwlarrResource = VpnRoutedResource<"prowlarr"> &
   Readonly<{

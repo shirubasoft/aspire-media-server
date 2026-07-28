@@ -1,10 +1,12 @@
-import { pbkdf2Sync, randomBytes } from "node:crypto";
+import { createHash, pbkdf2Sync, randomBytes } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 
 import { optional, required } from "./environment.js";
 import { writeIfChanged, writeOnce } from "./files.js";
 import { installJellyfinPlugins } from "./jellyfin-plugins.js";
 import { log } from "./log.js";
+import { writeBootstrapStatus } from "./status.js";
+import { validateConfiguration } from "./validation.js";
 
 const dataDirectories = [
   "backups",
@@ -99,38 +101,100 @@ function arrConfig({ name, port }: ArrBootstrap): string {
 `;
 }
 
-function routedServices(): Readonly<Record<string, string>> {
+interface RoutedService {
+  readonly url: string;
+  readonly requiresIngressAuthentication: boolean;
+}
+
+function routedServices(): Readonly<Record<string, RoutedService>> {
   return {
-    bazarr: required("BAZARR_URL"),
-    grafana: required("GRAFANA_URL"),
-    jellyfin: required("JELLYFIN_URL"),
-    jellyseerr: required("JELLYSEERR_URL"),
-    lidarr: required("LIDARR_URL"),
-    prometheus: required("PROMETHEUS_URL"),
-    prowlarr: required("PROWLARR_URL"),
-    qbittorrent: required("QBITTORRENT_URL"),
-    radarr: required("RADARR_URL"),
-    sonarr: required("SONARR_URL"),
+    bazarr: {
+      url: required("BAZARR_URL"),
+      requiresIngressAuthentication: true,
+    },
+    duplicati: {
+      url: required("DUPLICATI_URL"),
+      requiresIngressAuthentication: true,
+    },
+    grafana: {
+      url: required("GRAFANA_URL"),
+      requiresIngressAuthentication: true,
+    },
+    jellyfin: {
+      url: required("JELLYFIN_URL"),
+      requiresIngressAuthentication: false,
+    },
+    jellyseerr: {
+      url: required("JELLYSEERR_URL"),
+      requiresIngressAuthentication: false,
+    },
+    lidarr: {
+      url: required("LIDARR_URL"),
+      requiresIngressAuthentication: true,
+    },
+    prometheus: {
+      url: required("PROMETHEUS_URL"),
+      requiresIngressAuthentication: true,
+    },
+    prowlarr: {
+      url: required("PROWLARR_URL"),
+      requiresIngressAuthentication: true,
+    },
+    qbittorrent: {
+      url: required("QBITTORRENT_URL"),
+      requiresIngressAuthentication: true,
+    },
+    radarr: {
+      url: required("RADARR_URL"),
+      requiresIngressAuthentication: true,
+    },
+    sonarr: {
+      url: required("SONARR_URL"),
+      requiresIngressAuthentication: true,
+    },
+    tdarr: {
+      url: required("TDARR_URL"),
+      requiresIngressAuthentication: true,
+    },
   };
 }
 
 function traefikDynamicConfiguration(
   domain: string,
-  services: Readonly<Record<string, string>>,
+  services: Readonly<Record<string, RoutedService>>,
+  ingressUser: string,
+  ingressPassword: string,
 ): string {
   const routerLines: string[] = [];
   const serviceLines: string[] = [];
-  for (const [name, url] of Object.entries(services)) {
+  for (const [name, service] of Object.entries(services)) {
     routerLines.push(`    ${name}:
       rule: 'Host(\`${name}.${domain}\`)'
-      entryPoints: [web]
-      service: ${name}`);
+      entryPoints: [websecure]
+      service: ${name}
+      tls: {}
+${service.requiresIngressAuthentication ? "      middlewares: [admin-auth]" : ""}`);
     serviceLines.push(`    ${name}:
       loadBalancer:
         servers:
-          - url: "${url}"`);
+          - url: "${service.url}"`);
   }
+  routerLines.push(`    traefik-dashboard:
+      rule: 'Host(\`traefik.${domain}\`)'
+      entryPoints: [websecure]
+      service: api@internal
+      middlewares: [admin-auth]
+      tls: {}`);
+  const passwordHash = createHash("sha1")
+    .update(ingressPassword)
+    .digest("base64");
   return `http:
+  middlewares:
+    admin-auth:
+      basicAuth:
+        removeHeader: true
+        users:
+          - "${ingressUser}:{SHA}${passwordHash}"
   routers:
 ${routerLines.join("\n")}
   services:
@@ -178,6 +242,7 @@ datasources:
 
 export async function bootstrap(): Promise<void> {
   log.info("Starting deterministic bootstrap");
+  validateConfiguration(process.env);
   await Promise.all(
     dataDirectories.map((path) => mkdir(`/data/${path}`, { recursive: true })),
   );
@@ -209,10 +274,17 @@ export async function bootstrap(): Promise<void> {
 
   const services = routedServices();
   const domain = optional("TRAEFIK_DOMAIN", "localhost");
+  const ingressUser = required("INGRESS_ADMIN_USER");
+  const ingressPassword = required("INGRESS_ADMIN_PASSWORD");
   await Promise.all([
     writeIfChanged(
       "/data/traefik/dynamic/services.yml",
-      traefikDynamicConfiguration(domain, services),
+      traefikDynamicConfiguration(
+        domain,
+        services,
+        ingressUser,
+        ingressPassword,
+      ),
       0o644,
     ),
     writeIfChanged(
@@ -232,9 +304,12 @@ export async function bootstrap(): Promise<void> {
     ),
     writeIfChanged(
       "/data/grafana-provisioning/datasources/prometheus.yml",
-      grafanaDatasource(services.prometheus ?? "http://prometheus:9090"),
+      grafanaDatasource(
+        services.prometheus?.url ?? "http://prometheus:9090",
+      ),
       0o644,
     ),
   ]);
+  await writeBootstrapStatus();
   log.info("Bootstrap completed");
 }

@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { images } from "../images.mjs";
 
 import type { EndpointReferencePromise } from "../../.aspire/modules/aspire.mjs";
 import {
@@ -17,13 +18,15 @@ export function addTraefik(
   context: ResourceContext,
 ): TraefikResource {
   const resource = context.builder
-    .addContainer("traefik", "docker.io/library/traefik:v3.5")
+    .addContainer("traefik", images.traefik)
     .withArgs([
       "--api.dashboard=true",
-      "--api.insecure=true",
+      "--api.insecure=false",
       "--ping=true",
       "--entrypoints.web.address=:80",
       "--entrypoints.websecure.address=:443",
+      "--entrypoints.web.http.redirections.entrypoint.to=websecure",
+      "--entrypoints.web.http.redirections.entrypoint.scheme=https",
       "--providers.file.directory=/etc/traefik/dynamic",
       "--providers.file.watch=true",
       "--accesslog=true",
@@ -43,18 +46,30 @@ export function addTraefik(
       join(context.paths.data, "traefik", "logs"),
       "/var/log/traefik",
     )
-    .withHttpEndpoint({ name: "http", port: 80, targetPort: 80 })
-    .withHttpEndpoint({ name: "https", port: 443, targetPort: 443 })
-    .withHttpEndpoint({
+    .withEndpoint({
+      name: "http",
+      scheme: "http",
+      port: 80,
+      targetPort: 80,
+      isExternal: true,
+    })
+    .withEndpoint({
+      name: "https",
+      scheme: "https",
+      port: 443,
+      targetPort: 443,
+      isExternal: true,
+    })
+    .withEndpoint({
       name: "dashboard",
-      port: 8081,
+      scheme: "http",
       targetPort: 8080,
+      isExternal: false,
     })
     .withHttpHealthCheck({
       endpointName: "dashboard",
       path: "/ping",
-    })
-    .withExternalHttpEndpoints();
+    });
 
   return {
     kind: "traefik",

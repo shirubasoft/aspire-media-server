@@ -12,6 +12,8 @@
     "aspire:start": "aspire run",
     "aspire:build": "tsc -p tsconfig.apphost.json",
     "aspire:dev": "tsc --watch -p tsconfig.apphost.json",
+    "images:check": "tsx scripts/check-images.mts",
+    "publication:check": "tsx scripts/check-publication.mts",
     "control-plane:lint": "eslint control-plane/**/*.ts",
     "control-plane:build": "tsc -p tsconfig.control-plane.json",
     "control-plane:test": "npm run test:e2e",
@@ -26,6 +28,10 @@
     "publish": "tsx scripts/deployment.mts publish",
     "deploy": "tsx scripts/deployment.mts deploy",
     "deploy:down": "tsx scripts/deployment.mts down",
+    "repair": "tsx scripts/deployment.mts repair",
+    "status": "tsx scripts/deployment.mts status",
+    "locale": "tsx scripts/locale-profile.mts",
+    "cleanup:vpn": "tsx scripts/cleanup-vpn.mts",
     "watch": "npm run aspire:dev"
   },
   "dependencies": {

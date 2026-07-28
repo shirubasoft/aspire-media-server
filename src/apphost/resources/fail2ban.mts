@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { images } from "../images.mjs";
 
 import {
   type ArrspireResource,
@@ -14,7 +15,7 @@ export async function addFail2ban(
   traefik: TraefikResource,
 ): Promise<Fail2banResource> {
   const resource = context.builder
-    .addContainer("fail2ban", "docker.io/crazymax/fail2ban:latest")
+    .addContainer("fail2ban", images.fail2ban)
     .withEnvironment("TZ", context.parameters.timezone)
     .withEnvironment("F2B_LOG_TARGET", "STDOUT")
     .withEnvironment("F2B_LOG_LEVEL", "INFO")

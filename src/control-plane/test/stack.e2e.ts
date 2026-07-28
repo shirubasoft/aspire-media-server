@@ -309,6 +309,7 @@ void test(
       Parameters__duplicati_encryption_key: generatedSecret(32),
       Parameters__duplicati_web_password: generatedSecret(),
       Parameters__grafana_admin_password: generatedSecret(),
+      Parameters__ingress_admin_password: generatedSecret(),
     };
 
     try {

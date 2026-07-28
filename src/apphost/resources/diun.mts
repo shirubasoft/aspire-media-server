@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { images } from "../images.mjs";
 
 import {
   type ArrspireResource,
@@ -10,7 +11,7 @@ export type DiunResource = ArrspireResource<"diun">;
 
 export function addDiun(context: ResourceContext): DiunResource {
   const resource = context.builder
-    .addContainer("diun", "docker.io/crazymax/diun:latest")
+    .addContainer("diun", images.diun)
     .withEnvironment("TZ", context.parameters.timezone)
     .withEnvironment("LOG_LEVEL", "info")
     .withEnvironment("LOG_JSON", "false")

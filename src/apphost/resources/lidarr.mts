@@ -1,4 +1,5 @@
 import { addArrApp } from "./arr-app.mjs";
+import { images } from "../images.mjs";
 import {
   type ArrApiResource,
   createHttpResource,
@@ -14,7 +15,7 @@ export type LidarrResource = ArrApiResource<"lidarr"> &
 export function addLidarr(context: ResourceContext): LidarrResource {
   const resource = addArrApp(context, {
     name: "lidarr",
-    image: "ghcr.io/linuxserver/lidarr:latest",
+    image: images.lidarr,
     port: 8686,
     mediaDirectory: "music",
   });

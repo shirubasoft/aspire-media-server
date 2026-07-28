@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { images } from "../images.mjs";
 
 import {
   createHttpResource,
@@ -16,7 +17,7 @@ export function addGrafana(
 ): GrafanaResource {
   const resource = exposeHttp(
     context.builder
-      .addContainer("grafana", "docker.io/grafana/grafana:latest")
+      .addContainer("grafana", images.grafana)
       .withEnvironment(
         "GF_SECURITY_ADMIN_PASSWORD",
         context.parameters.grafanaAdminPassword,

@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { images } from "../images.mjs";
 
 import {
   createHttpResource,
@@ -25,7 +26,7 @@ export function addDuplicati(
   context: ResourceContext,
 ): DuplicatiResource {
   let resource = context.builder
-    .addContainer("duplicati", "docker.io/duplicati/duplicati:latest")
+    .addContainer("duplicati", images.duplicati)
     .withEnvironment("TZ", context.parameters.timezone)
     .withEnvironment(
       "DUPLICATI__SETTINGS_ENCRYPTION_KEY",

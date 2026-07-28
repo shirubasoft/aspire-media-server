@@ -26,6 +26,72 @@ export function addBootstrap(
         context.parameters.traefikDomain,
       )
       .withEnvironment(
+        "INGRESS_ADMIN_USER",
+        context.parameters.ingressAdminUser,
+      )
+      .withEnvironment(
+        "INGRESS_ADMIN_PASSWORD",
+        context.parameters.ingressAdminPassword,
+      )
+      .withEnvironment("VPN_PROVIDER", context.parameters.vpnProvider)
+      .withEnvironment(
+        "VPN_WIREGUARD_KEY",
+        context.parameters.vpnWireguardKey,
+      )
+      .withEnvironment(
+        "VPN_COUNTRIES",
+        context.parameters.vpnCountries,
+      )
+      .withEnvironment("TIMEZONE", context.parameters.timezone)
+      .withEnvironment(
+        "JELLYFIN_LANGUAGE",
+        context.parameters.jellyfinLanguage,
+      )
+      .withEnvironment(
+        "SUBTITLE_LANGUAGES",
+        context.parameters.subtitleLanguages,
+      )
+      .withEnvironment(
+        "USE_ORIGINAL_TITLE",
+        context.parameters.useOriginalTitle,
+      )
+      .withEnvironment(
+        "MINIMUM_SEEDERS",
+        context.parameters.minimumSeeders,
+      )
+      .withEnvironment(
+        "OPENSUBTITLESCOM_USER",
+        context.parameters.opensubtitlesComUser,
+      )
+      .withEnvironment(
+        "OPENSUBTITLESCOM_PASSWORD",
+        context.parameters.opensubtitlesComPassword,
+      )
+      .withEnvironment(
+        "OPENSUBTITLESORG_USER",
+        context.parameters.opensubtitlesOrgUser,
+      )
+      .withEnvironment(
+        "OPENSUBTITLESORG_PASSWORD",
+        context.parameters.opensubtitlesOrgPassword,
+      )
+      .withEnvironment(
+        "LEGENDASDIVX_USER",
+        context.parameters.legendasDivxUser,
+      )
+      .withEnvironment(
+        "LEGENDASDIVX_PASSWORD",
+        context.parameters.legendasDivxPassword,
+      )
+      .withEnvironment(
+        "LEGENDASNET_USER",
+        context.parameters.legendasNetUser,
+      )
+      .withEnvironment(
+        "LEGENDASNET_PASSWORD",
+        context.parameters.legendasNetPassword,
+      )
+      .withEnvironment(
         "PUID",
         process.getuid?.().toString() ?? "1000",
       )

@@ -1,6 +1,7 @@
 import { join } from "node:path";
 
 import type { GluetunResource } from "./gluetun.mjs";
+import { images } from "../images.mjs";
 import {
   exposeHttp,
   type ResourceContext,
@@ -13,7 +14,7 @@ import {
   type VpnRoutedResource,
 } from "./vpn-routed.mjs";
 
-const image = "ghcr.io/linuxserver/qbittorrent:latest";
+const image = images.qbittorrent;
 
 export type QBittorrentResource = VpnRoutedResource<"qbittorrent">;
 

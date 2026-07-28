@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
-import { cp, mkdtemp, mkdir, rm } from "node:fs/promises";
+import { chmod, cp, mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, sep } from "node:path";
 import test from "node:test";
@@ -274,10 +274,26 @@ void test(
     const data = join(root, "data");
     const media = join(root, "media");
     const downloads = join(root, "downloads");
+    const writableMediaDirectories = [
+      downloads,
+      join(media, "movies"),
+      join(media, "tv"),
+      join(media, "music"),
+    ];
     await Promise.all([
       mkdir(data),
-      mkdir(media),
-      mkdir(downloads),
+      ...writableMediaDirectories.map((directory) =>
+        mkdir(directory, { recursive: true }),
+      ),
+    ]);
+    // The Docker runner and LinuxServer's `abc` account can have different
+    // numeric IDs. These disposable directories must model writable media
+    // mounts regardless of the host/container UID mapping.
+    await Promise.all([
+      chmod(media, 0o777),
+      ...writableMediaDirectories.map((directory) =>
+        chmod(directory, 0o777),
+      ),
     ]);
     const environment: NodeJS.ProcessEnv = {
       ...process.env,

@@ -12,13 +12,10 @@ function write(
     ...fields,
   };
   const output = JSON.stringify(payload);
-  if (level === "error") {
-    console.error(output);
-  } else if (level === "warn") {
-    console.warn(output);
-  } else {
-    console.log(output);
-  }
+  // Aspire captures the resource's stdout as its structured log stream.
+  // Keep every severity on that stream; `level` remains the source of truth
+  // for filtering and alerting.
+  console.log(output);
 }
 
 export const log = {

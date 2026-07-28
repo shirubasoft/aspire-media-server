@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { cp, mkdtemp, mkdir, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { chmod, cp, mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, sep } from "node:path";
 import test from "node:test";
@@ -9,6 +10,17 @@ import { promisify } from "node:util";
 
 const execute = promisify(execFile);
 const projectDirectory = process.cwd();
+type ContainerEngine = "docker" | "podman";
+
+function containerEngine(): ContainerEngine {
+  const configured = process.env.ARRSPIRE_CONTAINER_ENGINE;
+  if (configured === "docker" || configured === "podman") {
+    return configured;
+  }
+  return existsSync("/var/run/docker.sock") ? "docker" : "podman";
+}
+
+const engine = containerEngine();
 
 interface RunningAppHost {
   readonly directory: string;
@@ -48,7 +60,7 @@ async function removeTestContainers(instanceId: string): Promise<void> {
   for (const service of ["qbittorrent", "prowlarr", "gluetun"]) {
     try {
       await execute(
-        "podman",
+        engine,
         ["rm", "--force", `arrspire-${instanceId}-${service}`],
         { cwd: projectDirectory, timeout: 30_000 },
       );
@@ -99,6 +111,32 @@ async function acceptanceResult(appHostDirectory: string): Promise<{
   return document.resources?.[0] ?? {};
 }
 
+async function resourceLogs(
+  appHostDirectory: string,
+  resource: string,
+): Promise<string> {
+  try {
+    const { stdout, stderr } = await execute(
+      "aspire",
+      [
+        "logs",
+        resource,
+        "--tail",
+        "160",
+        "--format",
+        "table",
+        "--non-interactive",
+      ],
+      { cwd: appHostDirectory, timeout: 30_000 },
+    );
+    return `${stdout}\n${stderr}`.trim();
+  } catch (error) {
+    return `Unable to collect logs: ${
+      error instanceof Error ? error.message : String(error)
+    }`;
+  }
+}
+
 async function runAcceptance(
   appHostDirectory: string,
   environment: NodeJS.ProcessEnv,
@@ -121,21 +159,21 @@ async function runAcceptance(
     );
     const result = await acceptanceResult(appHostDirectory);
     if (result.exitCode !== 0) {
-      const { stdout: logs } = await execute(
-        "aspire",
-        [
-          "logs",
-          "acceptance",
-          "--tail",
-          "120",
-          "--format",
-          "table",
-          "--non-interactive",
-        ],
-        { cwd: appHostDirectory, timeout: 30_000 },
+      const diagnosticResources = [
+        "acceptance",
+        "reconciler",
+        "gluetun",
+        "qbittorrent-vpn",
+        "prowlarr-vpn",
+      ];
+      const diagnosticLogs = await Promise.all(
+        diagnosticResources.map(async (resource) =>
+          `### ${resource}\n${await resourceLogs(appHostDirectory, resource)}`,
+        ),
       );
       assert.fail(
-        `${run} acceptance exited ${String(result.exitCode)} (${String(result.state)}):\n${logs}\n${appHost.output}`,
+        `${run} acceptance exited ${String(result.exitCode)} (${String(result.state)}):\n` +
+          `${diagnosticLogs.join("\n\n")}\n\n${appHost.output}`,
       );
     }
   } finally {
@@ -184,15 +222,32 @@ async function removeTestRoot(root: string): Promise<void> {
     ) {
       throw error;
     }
-    // Rootless Podman can represent an image's internal service user through
-    // a subordinate host UID. Widen only this validated temporary tree, then
-    // let Node perform the actual cleanup.
+    // Container images can create directories owned by internal service users.
+    // Widen only this validated temporary data tree, then let Node remove it.
     try {
-      await execute(
-        "podman",
-        ["unshare", "chmod", "-R", "a+rwx", join(root, "data")],
-        { cwd: projectDirectory, timeout: 30_000 },
-      );
+      if (engine === "podman") {
+        await execute(
+          "podman",
+          ["unshare", "chmod", "-R", "a+rwx", join(root, "data")],
+          { cwd: projectDirectory, timeout: 30_000 },
+        );
+      } else {
+        await execute(
+          "docker",
+          [
+            "run",
+            "--rm",
+            "--volume",
+            `${join(root, "data")}:/cleanup`,
+            "alpine:3.22",
+            "chmod",
+            "-R",
+            "a+rwx",
+            "/cleanup",
+          ],
+          { cwd: projectDirectory, timeout: 60_000 },
+        );
+      }
     } catch {
       // Files can disappear while the container runtime finishes teardown.
     }
@@ -219,10 +274,26 @@ void test(
     const data = join(root, "data");
     const media = join(root, "media");
     const downloads = join(root, "downloads");
+    const writableMediaDirectories = [
+      downloads,
+      join(media, "movies"),
+      join(media, "tv"),
+      join(media, "music"),
+    ];
     await Promise.all([
       mkdir(data),
-      mkdir(media),
-      mkdir(downloads),
+      ...writableMediaDirectories.map((directory) =>
+        mkdir(directory, { recursive: true }),
+      ),
+    ]);
+    // The Docker runner and LinuxServer's `abc` account can have different
+    // numeric IDs. These disposable directories must model writable media
+    // mounts regardless of the host/container UID mapping.
+    await Promise.all([
+      chmod(media, 0o777),
+      ...writableMediaDirectories.map((directory) =>
+        chmod(directory, 0o777),
+      ),
     ]);
     const environment: NodeJS.ProcessEnv = {
       ...process.env,

@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: src
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/package-lock.json
+
+      - name: Install Aspire CLI
+        working-directory: .
+        run: |
+          curl -sSL https://aspire.dev/install.sh | bash
+          echo "$HOME/.aspire/bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and lint
+        run: npm run build
+
+      - name: Run unit tests
+        run: npm run test:unit
+
+      - name: Validate Compose publication
+        run: npm run publish
+
+  e2e:
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: src
+    env:
+      ARRSPIRE_CONTAINER_ENGINE: docker
+      ASPIRE_CONTAINER_RUNTIME: docker
+      Parameters__vpn_wireguard_key: ${{ secrets.VPN_WIREGUARD_KEY }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/package-lock.json
+
+      - name: Install Aspire CLI
+        working-directory: .
+        run: |
+          curl -sSL https://aspire.dev/install.sh | bash
+          echo "$HOME/.aspire/bin" >> "$GITHUB_PATH"
+
+      - name: Enable TUN device
+        working-directory: .
+        run: |
+          sudo modprobe tun || true
+          if [[ ! -c /dev/net/tun ]]; then
+            sudo mkdir -p /dev/net
+            sudo mknod /dev/net/tun c 10 200
+          fi
+          sudo chmod 666 /dev/net/tun
+          test -c /dev/net/tun
+
+      - name: Verify Docker
+        working-directory: .
+        run: docker info
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run isolated real-stack E2E
+        run: npm test

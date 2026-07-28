@@ -1,4 +1,4 @@
-import { json, request } from "./http.js";
+import { HttpError, json, request } from "./http.js";
 import { log } from "./log.js";
 
 interface PublicSettings {
@@ -57,22 +57,47 @@ export class JellyseerrClient {
 
   private async authenticate(): Promise<void> {
     const jellyfin = new URL(this.jellyfinUrl);
-    const response = await request(
-      `${this.baseUrl}/api/v1/auth/jellyfin`,
-      {
+    const endpoint = `${this.baseUrl}/api/v1/auth/jellyfin`;
+    const credentials = {
+      username: this.username,
+      password: this.password,
+    };
+    const authenticate = (includeServer: boolean): Promise<Response> =>
+      request(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          username: this.username,
-          password: this.password,
-          hostname: jellyfin.hostname,
-          port: Number(jellyfin.port || 8096),
-          useSsl: jellyfin.protocol === "https:",
-          urlBase: "",
-          serverType: 2,
+          ...credentials,
+          ...(includeServer
+            ? {
+                hostname: jellyfin.hostname,
+                port: Number(jellyfin.port || 8096),
+                useSsl: jellyfin.protocol === "https:",
+                urlBase: "",
+                serverType: 2,
+              }
+            : {}),
         }),
-      },
-    );
+      });
+
+    let response: Response;
+    try {
+      response = await authenticate(true);
+    } catch (error) {
+      if (
+        !(error instanceof HttpError) ||
+        error.status !== 500 ||
+        !error.responseBody.includes(
+          "Jellyfin hostname already configured",
+        )
+      ) {
+        throw error;
+      }
+      // Jellyseerr persists its media-server settings before the setup
+      // wizard is marked initialized. Resume a partially completed setup by
+      // authenticating against that stored server instead of resending it.
+      response = await authenticate(false);
+    }
     this.cookie = response.headers.get("set-cookie")?.split(";")[0] ?? "";
     if (!this.cookie) {
       throw new Error("Jellyseerr did not return an authentication cookie");

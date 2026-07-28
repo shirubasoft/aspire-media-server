@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { images } from "../images.mjs";
 
 import {
   type ArrspireResource,
@@ -14,7 +15,7 @@ export function addRecyclarr(
   const resource = context.builder
     .addContainer(
       "recyclarr",
-      "ghcr.io/recyclarr/recyclarr:latest",
+      images.recyclarr,
     )
     .withEnvironment("TZ", context.parameters.timezone)
     .withEnvironment("CRON_SCHEDULE", "@daily")

@@ -86,17 +86,23 @@ export function exposeHttp(
   healthPath: string,
   endpointName = "http",
 ): ContainerResourcePromise {
+  const directAccess = directHostAccessEnabled();
   return resource
-    .withHttpEndpoint({
+    .withEndpoint({
       name: endpointName,
-      port,
+      scheme: "http",
       targetPort: port,
+      isExternal: directAccess,
+      ...(directAccess ? { port } : {}),
     })
     .withHttpHealthCheck({
       endpointName,
       path: healthPath,
-    })
-    .withExternalHttpEndpoints();
+    });
+}
+
+export function directHostAccessEnabled(): boolean {
+  return process.env.ARRSPIRE_EXPOSE_DIRECT_PORTS === "true";
 }
 
 export async function withComposeRestart(

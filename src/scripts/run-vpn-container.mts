@@ -1,4 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 function removeContainer(runtime: string, containerName: string): void {
   spawnSync(runtime, ["rm", "--force", containerName], {
@@ -6,13 +8,45 @@ function removeContainer(runtime: string, containerName: string): void {
   });
 }
 
-const [runtime, containerName, ...runArgs] = process.argv.slice(2);
-if (runtime === undefined || containerName === undefined) {
+const [
+  runtime,
+  containerName,
+  gluetunContainerName,
+  appHostPid,
+  ...runArgs
+] = process.argv.slice(2);
+if (
+  runtime === undefined ||
+  containerName === undefined ||
+  gluetunContainerName === undefined ||
+  appHostPid === undefined
+) {
   console.error(
-    "Usage: run-vpn-container.mts <runtime> <container-name> <run-args...>",
+    "Usage: run-vpn-container.mts <runtime> <container-name> <gluetun-name> <apphost-pid> <run-args...>",
   );
   process.exit(2);
 }
+
+const watchdogPath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "vpn-lifecycle-watchdog.mts",
+);
+const watchdog = spawn(
+  process.execPath,
+  [
+    watchdogPath,
+    runtime,
+    containerName,
+    gluetunContainerName,
+    String(process.pid),
+    appHostPid,
+  ],
+  {
+    detached: true,
+    stdio: "ignore",
+  },
+);
+watchdog.unref();
 
 const child = spawn(runtime, runArgs, { stdio: "inherit" });
 let stopping = false;

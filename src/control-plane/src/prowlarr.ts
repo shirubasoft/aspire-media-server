@@ -22,6 +22,12 @@ interface Application {
   readonly categories: readonly number[];
 }
 
+export interface ProwlarrOptionalIntegration {
+  readonly name: string;
+  readonly status: "ready" | "skipped" | "failed";
+  readonly reason?: string;
+}
+
 export class ProwlarrClient {
   private readonly apiBase: string;
 
@@ -35,12 +41,12 @@ export class ProwlarrClient {
   async reconcile(
     proxyUrl: string,
     applications: readonly Application[],
-  ): Promise<void> {
+  ): Promise<readonly ProwlarrOptionalIntegration[]> {
     await this.reconcileProxy(proxyUrl);
     for (const application of applications) {
       await this.reconcileApplication(application);
     }
-    await this.reconcilePublicIndexers();
+    return this.reconcilePublicIndexers();
   }
 
   private headers(): Readonly<Record<string, string>> {
@@ -134,7 +140,9 @@ export class ProwlarrClient {
     });
   }
 
-  private async reconcilePublicIndexers(): Promise<void> {
+  private async reconcilePublicIndexers(): Promise<
+    readonly ProwlarrOptionalIntegration[]
+  > {
     const desired: Readonly<Record<string, number>> = {
       EZTV: 25,
       LimeTorrents: 50,
@@ -142,6 +150,7 @@ export class ProwlarrClient {
     };
     const existing = await this.get<ProwlarrEntity[]>("/indexer");
     const schemas = await this.get<ProwlarrEntity[]>("/indexer/schema");
+    const results: ProwlarrOptionalIntegration[] = [];
 
     for (const [name, priority] of Object.entries(desired)) {
       const current = existing.find(
@@ -155,6 +164,11 @@ export class ProwlarrClient {
       );
       if (!model) {
         log.warn("Prowlarr indexer schema is unavailable", { indexer: name });
+        results.push({
+          name,
+          status: "skipped",
+          reason: "Prowlarr indexer schema is unavailable",
+        });
         continue;
       }
       model.enable = true;
@@ -167,6 +181,7 @@ export class ProwlarrClient {
           await this.send("POST", "/indexer", model);
         }
         log.info("Prowlarr indexer reconciled", { indexer: name, priority });
+        results.push({ name, status: "ready" });
       } catch (error) {
         // Public trackers routinely add bot protection or go offline. Their
         // temporary availability must not make the rest of Arrspire flaky.
@@ -174,7 +189,16 @@ export class ProwlarrClient {
           indexer: name,
           error: error instanceof Error ? error.message.slice(0, 240) : "unknown",
         });
+        results.push({
+          name,
+          status: "failed",
+          reason:
+            error instanceof Error
+              ? error.message.slice(0, 240)
+              : "Temporarily unavailable",
+        });
       }
     }
+    return results;
   }
 }

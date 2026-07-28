@@ -91,9 +91,7 @@ export function addReconciler(
       endpoints,
     ),
     dependencies,
-  )
-    .withHiddenOnCompletion()
-    .withLifetime(ContainerLifetime.Session);
+  ).withLifetime(ContainerLifetime.Session);
 
   return createResource("reconciler", resource);
 }

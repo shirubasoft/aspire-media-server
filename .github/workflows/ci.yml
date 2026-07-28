@@ -44,11 +44,14 @@ jobs:
       - name: Build and lint
         run: npm run build
 
+      - name: Validate immutable container images
+        run: npm run images:check
+
       - name: Run unit tests
         run: npm run test:unit
 
       - name: Validate Compose publication
-        run: npm run publish
+        run: npm run publish && npm run publication:check
 
   e2e:
     if: >-

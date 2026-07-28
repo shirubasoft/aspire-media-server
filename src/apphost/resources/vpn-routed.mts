@@ -74,6 +74,10 @@ export function addVpnProcess(
     "--rm",
     "--name",
     containerName,
+    "--label",
+    `io.arrspire.instance=${gluetun.runInstanceId}`,
+    "--label",
+    `io.arrspire.service=${options.name}`,
     "--network",
     `container:${gluetun.runContainerName}`,
   ];
@@ -101,6 +105,8 @@ export function addVpnProcess(
       "scripts/run-vpn-container.mts",
       runtime,
       containerName,
+      gluetun.runContainerName,
+      String(process.pid),
       ...args,
     ])
     .withRequiredCommand("node")

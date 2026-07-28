@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { images } from "../images.mjs";
 
 import {
   createHttpResource,
@@ -18,7 +19,7 @@ export function addJellyseerr(
       context.builder
         .addContainer(
           "jellyseerr",
-          "ghcr.io/fallenbagel/jellyseerr:latest",
+          images.jellyseerr,
         )
         .withBindMount(
           join(context.paths.data, "jellyseerr"),

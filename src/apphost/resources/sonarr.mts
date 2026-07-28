@@ -1,4 +1,5 @@
 import { addArrApp } from "./arr-app.mjs";
+import { images } from "../images.mjs";
 import {
   type ArrApiResource,
   createHttpResource,
@@ -14,7 +15,7 @@ export type SonarrResource = ArrApiResource<"sonarr"> &
 export function addSonarr(context: ResourceContext): SonarrResource {
   const resource = addArrApp(context, {
     name: "sonarr",
-    image: "ghcr.io/linuxserver/sonarr:latest",
+    image: images.sonarr,
     port: 8989,
     mediaDirectory: "tv",
   });

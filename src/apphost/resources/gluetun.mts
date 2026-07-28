@@ -9,6 +9,8 @@ import type {
   ArrspireResource,
   ResourceContext,
 } from "./resource.mjs";
+import { directHostAccessEnabled } from "./resource.mjs";
+import { images } from "../images.mjs";
 
 export type GluetunResource = ArrspireResource<"gluetun"> &
   Readonly<{
@@ -26,8 +28,9 @@ export async function addGluetun(
   const runIdentity = context.isRunMode
     ? createRunIdentity()
     : undefined;
+  const directAccess = directHostAccessEnabled();
   let resource = context.builder
-    .addContainer("gluetun", "docker.io/qmcgaw/gluetun:latest")
+    .addContainer("gluetun", images.gluetun)
     .withEnvironment(
       "VPN_SERVICE_PROVIDER",
       context.parameters.vpnProvider,
@@ -57,16 +60,16 @@ export async function addGluetun(
     .withEndpoint({
       name: "qbittorrent",
       scheme: "http",
-      port: 8080,
       targetPort: 8080,
-      isExternal: true,
+      isExternal: directAccess,
+      ...(directAccess ? { port: 8080 } : {}),
     })
     .withEndpoint({
       name: "prowlarr",
       scheme: "http",
-      port: 9696,
       targetPort: 9696,
-      isExternal: true,
+      isExternal: directAccess,
+      ...(directAccess ? { port: 9696 } : {}),
     });
 
   if (runIdentity !== undefined) {

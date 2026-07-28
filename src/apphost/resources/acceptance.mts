@@ -37,6 +37,10 @@ export function addAcceptance(
         .withEnvironment(
           "QBITTORRENT_PASSWORD",
           context.parameters.qbittorrentPassword,
+        )
+        .withEnvironment(
+          "TRAEFIK_DOMAIN",
+          context.parameters.traefikDomain,
         ),
       endpoints,
     )

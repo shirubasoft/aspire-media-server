@@ -1,4 +1,5 @@
 import { access, readFile, readdir } from "node:fs/promises";
+import { request as httpsRequest } from "node:https";
 
 import {
   readArrApiKey,
@@ -47,6 +48,8 @@ async function verifyBootstrapFiles(): Promise<void> {
     "/data/grafana-provisioning/datasources/prometheus.yml",
     "/data/prometheus-config/prometheus.yml",
     "/data/recyclarr/recyclarr.yml",
+    "/data/status/bootstrap.json",
+    "/data/status/reconciliation.json",
     "/data/traefik/dynamic/services.yml",
   ] as const;
   await Promise.all(files.map((path) => access(path)));
@@ -72,6 +75,33 @@ async function verifyBootstrapFiles(): Promise<void> {
       `Jellyfin plugin directory ${plugin} is missing`,
     );
   }
+}
+
+async function verifyIngressAuthentication(): Promise<void> {
+  const ingress = new URL(endpoint("ingress"));
+  const domain = required("TRAEFIK_DOMAIN");
+  const status = await new Promise<number>((resolve, reject) => {
+    const request = httpsRequest(
+      {
+        hostname: ingress.hostname,
+        port: ingress.port || 443,
+        path: "/",
+        method: "GET",
+        headers: { Host: `sonarr.${domain}` },
+        rejectUnauthorized: false,
+      },
+      (response) => {
+        response.resume();
+        resolve(response.statusCode ?? 0);
+      },
+    );
+    request.once("error", reject);
+    request.end();
+  });
+  ensure(
+    status === 401,
+    `Traefik administrative ingress accepted an unauthenticated request (${String(status)})`,
+  );
 }
 
 async function verifyQBittorrent(baseUrl: string): Promise<void> {
@@ -313,6 +343,7 @@ export async function verifyAcceptance(): Promise<void> {
 
   await Promise.all([
     verifyBootstrapFiles(),
+    verifyIngressAuthentication(),
     verifyQBittorrent(endpoint("qbittorrent")),
     verifyArr("sonarr", "v3", sonarrKey, "/tv"),
     verifyArr("radarr", "v3", radarrKey, "/movies"),

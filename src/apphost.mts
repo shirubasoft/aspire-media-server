@@ -2,10 +2,8 @@ import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createBuilder } from "./.aspire/modules/aspire.mjs";
 import { addArrspireParameters } from "./apphost/parameters.mjs";
-import {
-  addArrspireTopology,
-  resolveArrspirePaths,
-} from "./apphost/topology.mjs";
+import { resolveArrspirePaths } from "./apphost/paths.mjs";
+import { addArrspireTopology } from "./apphost/topology.mjs";
 
 const builder = await createBuilder();
 const executionContext = builder.executionContext();

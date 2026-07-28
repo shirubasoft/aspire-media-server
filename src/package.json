@@ -7,15 +7,23 @@
     "node": "^20.19.0 || ^22.13.0 || >=24"
   },
   "scripts": {
-    "aspire:lint": "eslint apphost.mts",
+    "aspire:lint": "eslint apphost.mts apphost/**/*.mts scripts/**/*.mts",
     "aspire:start": "aspire run",
     "aspire:build": "tsc -p tsconfig.apphost.json",
     "aspire:dev": "tsc --watch -p tsconfig.apphost.json",
-    "lint": "npm run aspire:lint",
+    "control-plane:lint": "eslint control-plane/**/*.ts",
+    "control-plane:build": "tsc -p tsconfig.control-plane.json",
+    "control-plane:test": "npm run test:e2e",
+    "lint": "npm run aspire:lint && npm run control-plane:lint",
+    "test": "npm run test:e2e",
+    "test:e2e": "npm run build && node --test --test-concurrency=1 dist/control-plane/test/**/*.e2e.js",
     "predev": "npm run aspire:lint",
     "dev": "npm run aspire:start",
-    "prebuild": "npm run aspire:lint",
-    "build": "npm run aspire:build",
+    "prebuild": "npm run lint",
+    "build": "npm run aspire:build && npm run control-plane:build",
+    "publish": "tsx scripts/deployment.mts publish",
+    "deploy": "tsx scripts/deployment.mts deploy",
+    "deploy:down": "tsx scripts/deployment.mts down",
     "watch": "npm run aspire:dev"
   },
   "dependencies": {

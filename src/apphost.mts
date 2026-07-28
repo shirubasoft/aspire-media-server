@@ -1,12 +1,22 @@
-// Aspire TypeScript AppHost
-// For more information, see: https://aspire.dev
-
-import { createBuilder } from './.aspire/modules/aspire.mjs';
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { createBuilder } from "./.aspire/modules/aspire.mjs";
+import { addArrspireParameters } from "./apphost/parameters.mjs";
+import {
+  addArrspireTopology,
+  resolveArrspirePaths,
+} from "./apphost/topology.mjs";
 
 const builder = await createBuilder();
+const executionContext = builder.executionContext();
+const isRunMode = await executionContext.isRunMode();
+const appHostDirectory = dirname(fileURLToPath(import.meta.url));
 
-// Add your resources here, for example:
-// const redis = await builder.addContainer("cache", "redis:latest");
-// const postgres = await builder.addPostgres("db");
+await builder.addDockerComposeEnvironment("arrspire");
+
+const parameters = addArrspireParameters(builder);
+const paths = resolveArrspirePaths(appHostDirectory, isRunMode);
+
+await addArrspireTopology(builder, parameters, paths, isRunMode);
 
 await builder.build().run();

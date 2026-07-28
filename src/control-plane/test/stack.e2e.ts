@@ -111,6 +111,32 @@ async function acceptanceResult(appHostDirectory: string): Promise<{
   return document.resources?.[0] ?? {};
 }
 
+async function resourceLogs(
+  appHostDirectory: string,
+  resource: string,
+): Promise<string> {
+  try {
+    const { stdout, stderr } = await execute(
+      "aspire",
+      [
+        "logs",
+        resource,
+        "--tail",
+        "160",
+        "--format",
+        "table",
+        "--non-interactive",
+      ],
+      { cwd: appHostDirectory, timeout: 30_000 },
+    );
+    return `${stdout}\n${stderr}`.trim();
+  } catch (error) {
+    return `Unable to collect logs: ${
+      error instanceof Error ? error.message : String(error)
+    }`;
+  }
+}
+
 async function runAcceptance(
   appHostDirectory: string,
   environment: NodeJS.ProcessEnv,
@@ -133,21 +159,21 @@ async function runAcceptance(
     );
     const result = await acceptanceResult(appHostDirectory);
     if (result.exitCode !== 0) {
-      const { stdout: logs } = await execute(
-        "aspire",
-        [
-          "logs",
-          "acceptance",
-          "--tail",
-          "120",
-          "--format",
-          "table",
-          "--non-interactive",
-        ],
-        { cwd: appHostDirectory, timeout: 30_000 },
+      const diagnosticResources = [
+        "acceptance",
+        "reconciler",
+        "gluetun",
+        "qbittorrent-vpn",
+        "prowlarr-vpn",
+      ];
+      const diagnosticLogs = await Promise.all(
+        diagnosticResources.map(async (resource) =>
+          `### ${resource}\n${await resourceLogs(appHostDirectory, resource)}`,
+        ),
       );
       assert.fail(
-        `${run} acceptance exited ${String(result.exitCode)} (${String(result.state)}):\n${logs}\n${appHost.output}`,
+        `${run} acceptance exited ${String(result.exitCode)} (${String(result.state)}):\n` +
+          `${diagnosticLogs.join("\n\n")}\n\n${appHost.output}`,
       );
     }
   } finally {

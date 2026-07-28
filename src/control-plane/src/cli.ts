@@ -2,6 +2,7 @@ import { verifyAcceptance } from "./acceptance.js";
 import { bootstrap } from "./bootstrap.js";
 import { log } from "./log.js";
 import { reconcile } from "./reconcile.js";
+import { retry } from "./retry.js";
 
 async function main(): Promise<void> {
   const command = process.argv[2];
@@ -10,7 +11,18 @@ async function main(): Promise<void> {
     return;
   }
   if (command === "reconcile") {
-    await reconcile();
+    await retry(reconcile, {
+      attempts: 12,
+      initialDelayMs: 2_000,
+      maximumDelayMs: 30_000,
+      onRetry: (error, attempt, delayMs) => {
+        log.warn("Reconciliation attempt failed; retrying", {
+          attempt,
+          delayMs,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      },
+    });
     return;
   }
   if (command === "verify") {

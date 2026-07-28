@@ -1,7 +1,12 @@
 import type {
   ContainerResourcePromise,
   EndpointReferencePromise,
+  ExecutableResourcePromise,
 } from "../.aspire/modules/aspire.mjs";
+
+export type ArrspireResourcePromise =
+  | ContainerResourcePromise
+  | ExecutableResourcePromise;
 
 /**
  * A small domain wrapper around Aspire's container builder.
@@ -14,11 +19,12 @@ import type {
 export abstract class ArrspireContainer<
   TKind extends string,
   TEndpoint extends string,
+  TResource extends ArrspireResourcePromise = ContainerResourcePromise,
 > {
   protected constructor(
     readonly kind: TKind,
     readonly name: string,
-    readonly resource: ContainerResourcePromise,
+    readonly resource: TResource,
   ) {}
 
   endpoint(name: TEndpoint): EndpointReferencePromise {
@@ -28,7 +34,8 @@ export abstract class ArrspireContainer<
 
 export abstract class ArrApiResource<
   TKind extends "sonarr" | "radarr" | "lidarr" | "prowlarr",
-> extends ArrspireContainer<TKind, "http"> {
+  TResource extends ArrspireResourcePromise = ContainerResourcePromise,
+> extends ArrspireContainer<TKind, "http", TResource> {
   abstract readonly apiVersion: "v1" | "v3";
   abstract readonly configDirectory: string;
 }
@@ -44,9 +51,10 @@ export class GluetunResource extends ArrspireContainer<
 
 export class QBittorrentResource extends ArrspireContainer<
   "qbittorrent",
-  "http"
+  "http",
+  ArrspireResourcePromise
 > {
-  constructor(name: string, resource: ContainerResourcePromise) {
+  constructor(name: string, resource: ArrspireResourcePromise) {
     super("qbittorrent", name, resource);
   }
 }
@@ -78,11 +86,14 @@ export class LidarrResource extends ArrApiResource<"lidarr"> {
   }
 }
 
-export class ProwlarrResource extends ArrApiResource<"prowlarr"> {
+export class ProwlarrResource extends ArrApiResource<
+  "prowlarr",
+  ArrspireResourcePromise
+> {
   readonly apiVersion = "v1" as const;
   readonly configDirectory = "/data/prowlarr";
 
-  constructor(name: string, resource: ContainerResourcePromise) {
+  constructor(name: string, resource: ArrspireResourcePromise) {
     super("prowlarr", name, resource);
   }
 }

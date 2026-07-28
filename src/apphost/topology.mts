@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
@@ -7,9 +8,11 @@ import {
   type ContainerResourcePromise,
   type DistributedApplicationBuilder,
   type EndpointReferencePromise,
+  type ExecutableResourcePromise,
 } from "../.aspire/modules/aspire.mjs";
 import type { ArrspireParameters } from "./parameters.mjs";
 import {
+  type ArrspireResourcePromise,
   AcceptanceResource,
   BazarrResource,
   BootstrapResource,
@@ -122,11 +125,66 @@ function exposeHttp(
     .withExternalHttpEndpoints();
 }
 
+function addVpnNamespaceProcess(
+  builder: DistributedApplicationBuilder,
+  options: {
+    readonly name: string;
+    readonly image: string;
+    readonly gluetunContainerName: string;
+    readonly instanceId: string;
+    readonly paths: ArrspirePaths;
+    readonly parameters: ArrspireParameters;
+    readonly environment?: Readonly<Record<string, string>>;
+    readonly mounts: readonly (readonly [source: string, target: string])[];
+  },
+): ExecutableResourcePromise {
+  const runtime =
+    process.env.ASPIRE_CONTAINER_RUNTIME ??
+    (options.paths.containerSocket.includes("podman.sock")
+      ? "podman"
+      : "docker");
+  const containerName = `arrspire-${options.instanceId}-${options.name}`;
+  const args = [
+    "run",
+    "--rm",
+    "--name",
+    containerName,
+    "--network",
+    `container:${options.gluetunContainerName}`,
+  ];
+  if (runtime === "podman" && options.paths.rootlessPodman) {
+    args.push("--userns=keep-id");
+  }
+  for (const [name, value] of Object.entries({
+    PUID: process.getuid?.().toString() ?? "1000",
+    PGID: process.getgid?.().toString() ?? "1000",
+    TZ: options.parameters.timezone,
+    ...options.environment,
+  })) {
+    args.push("--env", `${name}=${value}`);
+  }
+  for (const [source, target] of options.mounts) {
+    args.push("--volume", `${source}:${target}`);
+  }
+  args.push(options.image);
+
+  return builder
+    .addExecutable(`${options.name}-vpn`, "node", process.cwd(), [
+      "scripts/run-vpn-container.mts",
+      runtime,
+      containerName,
+      ...args,
+    ])
+    .withRequiredCommand("node")
+    .withRequiredCommand(runtime);
+}
+
 async function withComposeRestart(
   resource: ContainerResourcePromise,
+  policy = "unless-stopped",
 ): Promise<void> {
   await resource.publishAsDockerComposeService(async (_compose, service) => {
-    await service.restart.set("unless-stopped");
+    await service.restart.set(policy);
   });
 }
 
@@ -148,6 +206,14 @@ export async function addArrspireTopology(
   paths: ArrspirePaths,
   isRunMode: boolean,
 ): Promise<ArrspireTopology> {
+  const runGluetunContainerName = isRunMode
+    ? `arrspire-${
+        (process.env.ARRSPIRE_INSTANCE_ID ?? randomUUID().slice(0, 8))
+          .replaceAll(/[^a-zA-Z0-9_.-]/gu, "-")
+      }-gluetun`
+    : undefined;
+  const runInstanceId =
+    runGluetunContainerName?.slice("arrspire-".length, -"-gluetun".length);
   let gluetunContainer = builder
     .addContainer("gluetun", "docker.io/qmcgaw/gluetun:latest")
     .withEnvironment("VPN_SERVICE_PROVIDER", parameters.vpnProvider)
@@ -169,24 +235,26 @@ export async function addArrspireTopology(
     .withHttpEndpoint({
       name: "http-proxy",
       targetPort: 8888,
+    })
+    .withEndpoint({
+      name: "qbittorrent",
+      scheme: "http",
+      port: 8080,
+      targetPort: 8080,
+      isExternal: true,
+    })
+    .withEndpoint({
+      name: "prowlarr",
+      scheme: "http",
+      port: 9696,
+      targetPort: 9696,
+      isExternal: true,
     });
 
-  if (!isRunMode) {
-    gluetunContainer = gluetunContainer
-      .withEndpoint({
-        name: "qbittorrent",
-        scheme: "http",
-        port: 8080,
-        targetPort: 8080,
-        isExternal: true,
-      })
-      .withEndpoint({
-        name: "prowlarr",
-        scheme: "http",
-        port: 9696,
-        targetPort: 9696,
-        isExternal: true,
-      });
+  if (runGluetunContainerName !== undefined) {
+    gluetunContainer = gluetunContainer.withContainerName(
+      runGluetunContainerName,
+    );
   }
 
   const gluetun = new GluetunResource(
@@ -202,28 +270,48 @@ export async function addArrspireTopology(
     },
   );
 
+  let qbittorrentContainer = withLinuxServerDefaults(
+    builder
+      .addContainer(
+        "qbittorrent",
+        "ghcr.io/linuxserver/qbittorrent:latest",
+      )
+      .withEnvironment("WEBUI_PORT", "8080")
+      .withBindMount(join(paths.data, "qbittorrent"), "/config")
+      .withBindMount(paths.downloads, "/downloads")
+      .withBindMount(join(paths.media, "movies"), "/movies")
+      .withBindMount(join(paths.media, "tv"), "/tv")
+      .withBindMount(join(paths.media, "music"), "/music")
+      .waitFor(gluetun.resource),
+    parameters,
+    paths.rootlessPodman,
+  );
+  qbittorrentContainer = exposeHttp(qbittorrentContainer, 8080, "/");
+  if (isRunMode) {
+    qbittorrentContainer = qbittorrentContainer.withExplicitStart();
+  }
+  const qbittorrentRuntime =
+    runGluetunContainerName === undefined
+      ? qbittorrentContainer
+      : addVpnNamespaceProcess(builder, {
+          name: "qbittorrent",
+          image: "ghcr.io/linuxserver/qbittorrent:latest",
+          gluetunContainerName: runGluetunContainerName,
+          instanceId: runInstanceId!,
+          paths,
+          parameters,
+          environment: { WEBUI_PORT: "8080" },
+          mounts: [
+            [join(paths.data, "qbittorrent"), "/config"],
+            [paths.downloads, "/downloads"],
+            [join(paths.media, "movies"), "/movies"],
+            [join(paths.media, "tv"), "/tv"],
+            [join(paths.media, "music"), "/music"],
+          ],
+        }).waitFor(gluetun.resource);
   const qbittorrent = new QBittorrentResource(
     "qbittorrent",
-    exposeHttp(
-      withLinuxServerDefaults(
-        builder
-          .addContainer(
-            "qbittorrent",
-            "ghcr.io/linuxserver/qbittorrent:latest",
-          )
-          .withEnvironment("WEBUI_PORT", "8080")
-          .withBindMount(join(paths.data, "qbittorrent"), "/config")
-          .withBindMount(paths.downloads, "/downloads")
-          .withBindMount(join(paths.media, "movies"), "/movies")
-          .withBindMount(join(paths.media, "tv"), "/tv")
-          .withBindMount(join(paths.media, "music"), "/music")
-          .waitFor(gluetun.resource),
-        parameters,
-        paths.rootlessPodman,
-      ),
-      8080,
-      "/",
-    ),
+    qbittorrentRuntime,
   );
 
   const sonarr = new SonarrResource(
@@ -277,24 +365,34 @@ export async function addArrspireTopology(
     ),
   );
 
-  const prowlarr = new ProwlarrResource(
-    "prowlarr",
-    exposeHttp(
-      withLinuxServerDefaults(
-        builder
-          .addContainer(
-            "prowlarr",
-            "lscr.io/linuxserver/prowlarr:latest",
-          )
-          .withBindMount(join(paths.data, "prowlarr"), "/config")
-          .waitFor(gluetun.resource),
-        parameters,
-        paths.rootlessPodman,
-      ),
-      9696,
-      "/ping",
-    ),
+  let prowlarrContainer = withLinuxServerDefaults(
+    builder
+      .addContainer(
+        "prowlarr",
+        "lscr.io/linuxserver/prowlarr:latest",
+      )
+      .withBindMount(join(paths.data, "prowlarr"), "/config")
+      .waitFor(gluetun.resource),
+    parameters,
+    paths.rootlessPodman,
   );
+  prowlarrContainer = exposeHttp(prowlarrContainer, 9696, "/ping");
+  if (isRunMode) {
+    prowlarrContainer = prowlarrContainer.withExplicitStart();
+  }
+  const prowlarrRuntime =
+    runGluetunContainerName === undefined
+      ? prowlarrContainer
+      : addVpnNamespaceProcess(builder, {
+          name: "prowlarr",
+          image: "lscr.io/linuxserver/prowlarr:latest",
+          gluetunContainerName: runGluetunContainerName,
+          instanceId: runInstanceId!,
+          paths,
+          parameters,
+          mounts: [[join(paths.data, "prowlarr"), "/config"]],
+        }).waitFor(gluetun.resource);
+  const prowlarr = new ProwlarrResource("prowlarr", prowlarrRuntime);
 
   const bazarr = new BazarrResource(
     "bazarr",
@@ -563,12 +661,8 @@ export async function addArrspireTopology(
     ),
   );
 
-  const qbitEndpoint = isRunMode
-    ? qbittorrent.endpoint("http")
-    : gluetun.endpoint("qbittorrent");
-  const prowlarrEndpoint = isRunMode
-    ? prowlarr.endpoint("http")
-    : gluetun.endpoint("prowlarr");
+  const qbitEndpoint = gluetun.endpoint("qbittorrent");
+  const prowlarrEndpoint = gluetun.endpoint("prowlarr");
 
   const bootstrap = addBootstrap(
     builder,
@@ -614,10 +708,21 @@ export async function addArrspireTopology(
   );
 
   if (!isRunMode) {
-    await shareComposeNetworkNamespace(qbittorrent.resource, gluetun.name);
-    await shareComposeNetworkNamespace(prowlarr.resource, gluetun.name);
+    await shareComposeNetworkNamespace(qbittorrentContainer, gluetun.name);
+    await shareComposeNetworkNamespace(prowlarrContainer, gluetun.name);
   }
 
+  const reconciledResources = [
+    gluetun.resource,
+    qbittorrent.resource,
+    sonarr.resource,
+    radarr.resource,
+    lidarr.resource,
+    prowlarr.resource,
+    bazarr.resource,
+    jellyfin.resource,
+    jellyseerr.resource,
+  ];
   const reconciler = addReconciler(
     builder,
     parameters,
@@ -633,17 +738,7 @@ export async function addArrspireTopology(
       jellyseerr: jellyseerr.endpoint("http"),
       qbittorrent: qbitEndpoint,
     },
-    [
-      gluetun.resource,
-      qbittorrent.resource,
-      sonarr.resource,
-      radarr.resource,
-      lidarr.resource,
-      prowlarr.resource,
-      bazarr.resource,
-      jellyfin.resource,
-      jellyseerr.resource,
-    ],
+    reconciledResources,
   );
 
   await recyclarr.resource.waitForCompletion(reconciler.resource);
@@ -666,29 +761,32 @@ export async function addArrspireTopology(
             qbittorrent: qbitEndpoint,
           },
           reconciler,
-          bootstrappedResources,
+          reconciledResources,
         )
       : undefined;
 
   await Promise.all(
     [
-      gluetun.resource,
-      qbittorrent.resource,
-      sonarr.resource,
-      radarr.resource,
-      lidarr.resource,
-      prowlarr.resource,
-      bazarr.resource,
-      jellyfin.resource,
-      jellyseerr.resource,
-      recyclarr.resource,
-      duplicati.resource,
-      tdarr.resource,
-      traefik.resource,
-      diun.resource,
-      prometheus.resource,
-      grafana.resource,
-    ].map(withComposeRestart),
+      ...[
+        gluetun.resource,
+        qbittorrentContainer,
+        sonarr.resource,
+        radarr.resource,
+        lidarr.resource,
+        prowlarrContainer,
+        bazarr.resource,
+        jellyfin.resource,
+        jellyseerr.resource,
+        recyclarr.resource,
+        duplicati.resource,
+        tdarr.resource,
+        traefik.resource,
+        diun.resource,
+        prometheus.resource,
+        grafana.resource,
+      ].map((resource) => withComposeRestart(resource)),
+      withComposeRestart(reconciler.resource, "on-failure:5"),
+    ],
   );
 
   return {
@@ -741,9 +839,6 @@ function addControlPlaneContainer(
     .addDockerfile(name, ".", {
       dockerfilePath: "control-plane/Dockerfile",
     })
-    .publishAsDockerComposeService(async (_compose, service) => {
-      await service.image.set("localhost/arrspire-control-plane:1.0.0");
-    })
     .withArgs([command])
     .withBindMount(paths.data, "/data")
     .withBindMount(paths.media, "/media")
@@ -794,7 +889,7 @@ function addReconciler(
   parameters: ArrspireParameters,
   paths: ArrspirePaths,
   endpoints: Readonly<Record<string, EndpointReferencePromise>>,
-  dependencies: readonly ContainerResourcePromise[],
+  dependencies: readonly ArrspireResourcePromise[],
 ): ReconcilerResource {
   let resource = withEndpointEnvironment(
     addControlPlaneContainer(builder, "reconciler", "reconcile", paths)
@@ -866,7 +961,7 @@ function addAcceptance(
   paths: ArrspirePaths,
   endpoints: Readonly<Record<string, EndpointReferencePromise>>,
   reconciler: ReconcilerResource,
-  dependencies: readonly ContainerResourcePromise[],
+  dependencies: readonly ArrspireResourcePromise[],
 ): AcceptanceResource {
   let resource = withEndpointEnvironment(
     addControlPlaneContainer(builder, "acceptance", "verify", paths)

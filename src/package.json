@@ -7,6 +7,7 @@
     "node": "^20.19.0 || ^22.13.0 || >=24"
   },
   "scripts": {
+    "aspire:restore": "aspire restore --non-interactive",
     "aspire:lint": "eslint apphost.mts apphost/**/*.mts scripts/**/*.mts",
     "aspire:start": "aspire run",
     "aspire:build": "tsc -p tsconfig.apphost.json",
@@ -16,10 +17,11 @@
     "control-plane:test": "npm run test:e2e",
     "lint": "npm run aspire:lint && npm run control-plane:lint",
     "test": "npm run test:e2e",
+    "test:unit": "npm run build && node --test dist/control-plane/test/**/*.test.js",
     "test:e2e": "npm run build && node --test --test-concurrency=1 dist/control-plane/test/**/*.e2e.js",
-    "predev": "npm run aspire:lint",
+    "predev": "npm run aspire:restore && npm run lint",
     "dev": "npm run aspire:start",
-    "prebuild": "npm run lint",
+    "prebuild": "npm run aspire:restore && npm run lint",
     "build": "npm run aspire:build && npm run control-plane:build",
     "publish": "tsx scripts/deployment.mts publish",
     "deploy": "tsx scripts/deployment.mts deploy",

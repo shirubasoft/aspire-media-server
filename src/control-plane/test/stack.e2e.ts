@@ -1,104 +1,81 @@
 import assert from "node:assert/strict";
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { cp, mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
+import { join, relative, sep } from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { execFile } from "node:child_process";
 
 const execute = promisify(execFile);
 const projectDirectory = process.cwd();
 
 interface RunningAppHost {
-  readonly child: ChildProcessWithoutNullStreams;
-  readonly ready: Promise<void>;
-  readonly output: () => string;
+  readonly directory: string;
+  readonly instanceId: string;
+  readonly output: string;
 }
 
-function startAppHost(environment: NodeJS.ProcessEnv): RunningAppHost {
-  const child = spawn("aspire", ["run", "--non-interactive"], {
-    cwd: projectDirectory,
-    env: environment,
-    stdio: ["pipe", "pipe", "pipe"],
-  });
-  let buffered = "";
-  let ready = false;
-  let resolveReady: (() => void) | undefined;
-  let rejectReady: ((error: Error) => void) | undefined;
-  const readyPromise = new Promise<void>((resolve, reject) => {
-    resolveReady = resolve;
-    rejectReady = reject;
-  });
-  const readinessTimeout = setTimeout(() => {
-    if (!ready) {
-      rejectReady?.(
-        new Error(`Aspire did not start within two minutes:\n${buffered}`),
-      );
-    }
-  }, 120_000);
-  readinessTimeout.unref();
-
-  const capture = (chunk: Buffer): void => {
-    buffered = `${buffered}${chunk.toString("utf8")}`.slice(-80_000);
-    if (!ready && buffered.includes("Starting dashboard")) {
-      ready = true;
-      clearTimeout(readinessTimeout);
-      resolveReady?.();
-    }
-  };
-  child.stdout.on("data", capture);
-  child.stderr.on("data", capture);
-  child.once("error", (error) => {
-    clearTimeout(readinessTimeout);
-    rejectReady?.(error);
-  });
-  child.once("exit", (code) => {
-    if (!ready) {
-      clearTimeout(readinessTimeout);
-      rejectReady?.(
-        new Error(`Aspire exited before startup (code ${String(code)}):\n${buffered}`),
-      );
-    }
-  });
-
+async function startAppHost(
+  appHostDirectory: string,
+  environment: NodeJS.ProcessEnv,
+): Promise<RunningAppHost> {
+  const { stdout, stderr } = await execute(
+    "aspire",
+    [
+      "start",
+      "--isolated",
+      "--no-build",
+      "--format",
+      "json",
+      "--non-interactive",
+    ],
+    {
+      cwd: appHostDirectory,
+      env: environment,
+      timeout: 180_000,
+    },
+  );
   return {
-    child,
-    ready: readyPromise,
-    output: () => buffered,
+    directory: appHostDirectory,
+    instanceId: environment.ARRSPIRE_INSTANCE_ID!,
+    output: `${stdout}\n${stderr}`.slice(-80_000),
   };
+}
+
+async function removeTestContainers(instanceId: string): Promise<void> {
+  assert.match(instanceId, /^[a-f0-9]{16}$/u);
+  for (const service of ["qbittorrent", "prowlarr", "gluetun"]) {
+    try {
+      await execute(
+        "podman",
+        ["rm", "--force", `arrspire-${instanceId}-${service}`],
+        { cwd: projectDirectory, timeout: 30_000 },
+      );
+    } catch {
+      // Aspire or the wrapper may already have removed the exact container.
+    }
+  }
 }
 
 async function stopAppHost(appHost: RunningAppHost): Promise<void> {
-  if (appHost.child.exitCode !== null) {
-    return;
-  }
   try {
-    await execute("aspire", ["stop", "--non-interactive"], {
-      cwd: projectDirectory,
-      timeout: 60_000,
-    });
-  } catch {
-    // The child process is still terminated below. Preserve the original test
-    // result rather than hiding it behind a best-effort shutdown error.
+    await execute(
+      "aspire",
+      [
+        "stop",
+        "--apphost",
+        join(appHost.directory, "apphost.mts"),
+        "--non-interactive",
+      ],
+      { cwd: appHost.directory, timeout: 60_000 },
+    );
+  } finally {
+    await removeTestContainers(appHost.instanceId);
   }
-  if (appHost.child.exitCode !== null) {
-    return;
-  }
-  appHost.child.kill("SIGTERM");
-  const exited = new Promise<void>((resolve) => {
-    appHost.child.once("exit", () => resolve());
-  });
-  await Promise.race([
-    exited,
-    delay(15_000).then(() => {
-      appHost.child.kill("SIGKILL");
-    }),
-  ]);
 }
 
-async function acceptanceResult(): Promise<{
+async function acceptanceResult(appHostDirectory: string): Promise<{
   readonly state?: string;
   readonly exitCode?: number;
 }> {
@@ -111,7 +88,7 @@ async function acceptanceResult(): Promise<{
       "json",
       "--non-interactive",
     ],
-    { cwd: projectDirectory, timeout: 30_000 },
+    { cwd: appHostDirectory, timeout: 30_000 },
   );
   const document = JSON.parse(stdout) as {
     readonly resources?: Array<{
@@ -123,12 +100,12 @@ async function acceptanceResult(): Promise<{
 }
 
 async function runAcceptance(
+  appHostDirectory: string,
   environment: NodeJS.ProcessEnv,
   run: "fresh" | "repeat",
 ): Promise<void> {
-  const appHost = startAppHost(environment);
+  const appHost = await startAppHost(appHostDirectory, environment);
   try {
-    await appHost.ready;
     await execute(
       "aspire",
       [
@@ -140,9 +117,9 @@ async function runAcceptance(
         "900",
         "--non-interactive",
       ],
-      { cwd: projectDirectory, timeout: 920_000 },
+      { cwd: appHostDirectory, timeout: 920_000 },
     );
-    const result = await acceptanceResult();
+    const result = await acceptanceResult(appHostDirectory);
     if (result.exitCode !== 0) {
       const { stdout: logs } = await execute(
         "aspire",
@@ -155,10 +132,10 @@ async function runAcceptance(
           "table",
           "--non-interactive",
         ],
-        { cwd: projectDirectory, timeout: 30_000 },
+        { cwd: appHostDirectory, timeout: 30_000 },
       );
       assert.fail(
-        `${run} acceptance exited ${String(result.exitCode)} (${String(result.state)}):\n${logs}\n${appHost.output()}`,
+        `${run} acceptance exited ${String(result.exitCode)} (${String(result.state)}):\n${logs}\n${appHost.output}`,
       );
     }
   } finally {
@@ -166,10 +143,39 @@ async function runAcceptance(
   }
 }
 
+async function createIsolatedAppHost(root: string): Promise<string> {
+  const appHostDirectory = join(root, "apphost");
+  await cp(projectDirectory, appHostDirectory, {
+    recursive: true,
+    filter: (source) => {
+      const path = relative(projectDirectory, source);
+      const topLevel = path.split(sep)[0];
+      return !["aspire-output", "data", "dist", "node_modules"].includes(
+        topLevel ?? "",
+      );
+    },
+  });
+  await cp(
+    join(projectDirectory, "node_modules"),
+    join(appHostDirectory, "node_modules"),
+    { recursive: true },
+  );
+  return appHostDirectory;
+}
+
+function generatedSecret(bytes = 24): string {
+  return randomBytes(bytes).toString("base64url");
+}
+
 async function removeTestRoot(root: string): Promise<void> {
   assert.match(root, /[/\\]arrspire-e2e-[^/\\]+$/u);
   try {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 250,
+    });
   } catch (error) {
     if (
       !(error instanceof Error) ||
@@ -181,12 +187,21 @@ async function removeTestRoot(root: string): Promise<void> {
     // Rootless Podman can represent an image's internal service user through
     // a subordinate host UID. Widen only this validated temporary tree, then
     // let Node perform the actual cleanup.
-    await execute(
-      "podman",
-      ["unshare", "chmod", "-R", "a+rwx", root],
-      { cwd: projectDirectory, timeout: 30_000 },
-    );
-    await rm(root, { recursive: true, force: true });
+    try {
+      await execute(
+        "podman",
+        ["unshare", "chmod", "-R", "a+rwx", join(root, "data")],
+        { cwd: projectDirectory, timeout: 30_000 },
+      );
+    } catch {
+      // Files can disappear while the container runtime finishes teardown.
+    }
+    await rm(root, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 250,
+    });
   }
 }
 
@@ -194,7 +209,13 @@ void test(
   "fresh real stack auto-configures and remains correct after restart",
   { timeout: 2_000_000 },
   async () => {
+    const vpnWireguardKey = process.env.Parameters__vpn_wireguard_key?.trim();
+    assert.ok(
+      vpnWireguardKey,
+      "Set Parameters__vpn_wireguard_key before running the isolated E2E test",
+    );
     const root = await mkdtemp(join(tmpdir(), "arrspire-e2e-"));
+    const appHostDirectory = await createIsolatedAppHost(root);
     const data = join(root, "data");
     const media = join(root, "media");
     const downloads = join(root, "downloads");
@@ -209,12 +230,19 @@ void test(
       ARRSPIRE_DATA_PATH: data,
       ARRSPIRE_MEDIA_PATH: media,
       ARRSPIRE_DOWNLOADS_PATH: downloads,
+      ARRSPIRE_INSTANCE_ID: randomBytes(8).toString("hex"),
       NO_COLOR: "1",
+      Parameters__vpn_wireguard_key: vpnWireguardKey,
+      Parameters__jellyfin_admin_password: generatedSecret(),
+      Parameters__qbittorrent_password: generatedSecret(),
+      Parameters__duplicati_encryption_key: generatedSecret(32),
+      Parameters__duplicati_web_password: generatedSecret(),
+      Parameters__grafana_admin_password: generatedSecret(),
     };
 
     try {
-      await runAcceptance(environment, "fresh");
-      await runAcceptance(environment, "repeat");
+      await runAcceptance(appHostDirectory, environment, "fresh");
+      await runAcceptance(appHostDirectory, environment, "repeat");
     } finally {
       await removeTestRoot(root);
     }

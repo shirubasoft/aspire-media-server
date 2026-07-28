@@ -31,6 +31,21 @@ interface ServiceUrls {
   readonly qbittorrent: string;
 }
 
+async function integration(
+  name: string,
+  operation: () => Promise<void>,
+): Promise<void> {
+  try {
+    await operation();
+    log.info("Integration reconciled", { integration: name });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`${name} reconciliation failed: ${message}`, {
+      cause: error,
+    });
+  }
+}
+
 function loadServiceUrls(): ServiceUrls {
   return {
     gluetunProxy: required("GLUETUN_PROXY_URL"),
@@ -117,38 +132,49 @@ export async function reconcile(): Promise<void> {
   ]);
 
   const arrClients = [
-    new ArrClient({
+    {
       name: "sonarr",
-      baseUrl: urls.sonarr,
-      apiVersion: "v3",
-      apiKey: sonarrKey,
-      rootFolder: "/tv",
-      category: "sonarr",
-    }),
-    new ArrClient({
+      client: new ArrClient({
+        name: "sonarr",
+        baseUrl: urls.sonarr,
+        apiVersion: "v3",
+        apiKey: sonarrKey,
+        rootFolder: "/tv",
+        category: "sonarr",
+      }),
+    },
+    {
       name: "radarr",
-      baseUrl: urls.radarr,
-      apiVersion: "v3",
-      apiKey: radarrKey,
-      rootFolder: "/movies",
-      category: "radarr",
-    }),
-    new ArrClient({
+      client: new ArrClient({
+        name: "radarr",
+        baseUrl: urls.radarr,
+        apiVersion: "v3",
+        apiKey: radarrKey,
+        rootFolder: "/movies",
+        category: "radarr",
+      }),
+    },
+    {
       name: "lidarr",
-      baseUrl: urls.lidarr,
-      apiVersion: "v1",
-      apiKey: lidarrKey,
-      rootFolder: "/music",
-      category: "lidarr",
-    }),
+      client: new ArrClient({
+        name: "lidarr",
+        baseUrl: urls.lidarr,
+        apiVersion: "v1",
+        apiKey: lidarrKey,
+        rootFolder: "/music",
+        category: "lidarr",
+      }),
+    },
   ] as const;
   await Promise.all(
-    arrClients.map((client) =>
-      client.reconcile(
-        urls.qbittorrent,
-        qbittorrentPassword,
-        minimumSeeders,
-        useOriginalTitle,
+    arrClients.map(({ name, client }) =>
+      integration(name, () =>
+        client.reconcile(
+          urls.qbittorrent,
+          qbittorrentPassword,
+          minimumSeeders,
+          useOriginalTitle,
+        ),
       ),
     ),
   );
@@ -162,50 +188,58 @@ export async function reconcile(): Promise<void> {
     jellyfinPassword,
   );
   await Promise.all([
-    prowlarr.reconcile(urls.gluetunProxy, [
-      {
-        name: "Sonarr",
-        url: urls.sonarr,
-        apiKey: sonarrKey,
-        categories: [5000, 5010, 5020, 5030, 5040, 5045, 5050],
-      },
-      {
-        name: "Radarr",
-        url: urls.radarr,
-        apiKey: radarrKey,
-        categories: [2000, 2010, 2020, 2030, 2040, 2045, 2050, 2060],
-      },
-      {
-        name: "Lidarr",
-        url: urls.lidarr,
-        apiKey: lidarrKey,
-        categories: [3000, 3010, 3020, 3030, 3040],
-      },
-    ]),
-    bazarr.reconcile(
-      urls.sonarr,
-      sonarrKey,
-      urls.radarr,
-      radarrKey,
-      languages,
-      {
-        opensubtitlesComUser: optional("OPENSUBTITLESCOM_USER"),
-        opensubtitlesComPassword: optional("OPENSUBTITLESCOM_PASSWORD"),
-        opensubtitlesOrgUser: optional("OPENSUBTITLESORG_USER"),
-        opensubtitlesOrgPassword: optional("OPENSUBTITLESORG_PASSWORD"),
-        legendasDivxUser: optional("LEGENDASDIVX_USER"),
-        legendasDivxPassword: optional("LEGENDASDIVX_PASSWORD"),
-        legendasNetUser: optional("LEGENDASNET_USER"),
-        legendasNetPassword: optional("LEGENDASNET_PASSWORD"),
-      },
+    integration("prowlarr", () =>
+      prowlarr.reconcile(urls.gluetunProxy, [
+        {
+          name: "Sonarr",
+          url: urls.sonarr,
+          apiKey: sonarrKey,
+          categories: [5000, 5010, 5020, 5030, 5040, 5045, 5050],
+        },
+        {
+          name: "Radarr",
+          url: urls.radarr,
+          apiKey: radarrKey,
+          categories: [2000, 2010, 2020, 2030, 2040, 2045, 2050, 2060],
+        },
+        {
+          name: "Lidarr",
+          url: urls.lidarr,
+          apiKey: lidarrKey,
+          categories: [3000, 3010, 3020, 3030, 3040],
+        },
+      ]),
     ),
-    jellyseerr.reconcile(
-      urls.sonarr,
-      sonarrKey,
-      urls.radarr,
-      radarrKey,
+    integration("bazarr", () =>
+      bazarr.reconcile(
+        urls.sonarr,
+        sonarrKey,
+        urls.radarr,
+        radarrKey,
+        languages,
+        {
+          opensubtitlesComUser: optional("OPENSUBTITLESCOM_USER"),
+          opensubtitlesComPassword: optional("OPENSUBTITLESCOM_PASSWORD"),
+          opensubtitlesOrgUser: optional("OPENSUBTITLESORG_USER"),
+          opensubtitlesOrgPassword: optional("OPENSUBTITLESORG_PASSWORD"),
+          legendasDivxUser: optional("LEGENDASDIVX_USER"),
+          legendasDivxPassword: optional("LEGENDASDIVX_PASSWORD"),
+          legendasNetUser: optional("LEGENDASNET_USER"),
+          legendasNetPassword: optional("LEGENDASNET_PASSWORD"),
+        },
+      ),
     ),
-    reconcileRecyclarr(urls.sonarr, sonarrKey, urls.radarr, radarrKey),
+    integration("jellyseerr", () =>
+      jellyseerr.reconcile(
+        urls.sonarr,
+        sonarrKey,
+        urls.radarr,
+        radarrKey,
+      ),
+    ),
+    integration("recyclarr", () =>
+      reconcileRecyclarr(urls.sonarr, sonarrKey, urls.radarr, radarrKey),
+    ),
   ]);
 
   log.info("All Arrspire integrations are reconciled");

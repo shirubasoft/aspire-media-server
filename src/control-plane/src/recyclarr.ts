@@ -34,6 +34,9 @@ sonarr:
       - trash_id: 72dae194fc92bf828f32cde7744e51a1 # WEB-1080p
         reset_unmatched_scores:
           enabled: true
+      - trash_id: 20e0fc959f1f1704bed501f23bdae76f # [Anime] Remux-1080p
+        reset_unmatched_scores:
+          enabled: true
 
 radarr:
   movies:

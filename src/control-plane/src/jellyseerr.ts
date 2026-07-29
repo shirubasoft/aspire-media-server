@@ -144,6 +144,9 @@ export class JellyseerrClient {
       }),
     ]);
     const profile = profiles[0];
+    const animeProfile = profiles.find(
+      (candidate) => candidate.name === "[Anime] Remux-1080p",
+    );
     const folder = folders[0];
     const payload = {
       name: kind === "sonarr" ? "Sonarr" : "Radarr",
@@ -160,7 +163,16 @@ export class JellyseerrClient {
       syncEnabled: true,
       preventSearch: false,
       ...(kind === "sonarr"
-        ? { enableSeasonFolders: true }
+        ? {
+            enableSeasonFolders: true,
+            seriesType: "standard",
+            animeSeriesType: "anime",
+            activeAnimeProfileId: animeProfile?.id ?? profile?.id ?? 1,
+            activeAnimeProfileName:
+              animeProfile?.name ?? profile?.name ?? "Any",
+            activeAnimeDirectory: folder?.path ?? fallbackDirectory,
+            animeTags: [],
+          }
         : { minimumAvailability: "released" }),
     };
     const existing =

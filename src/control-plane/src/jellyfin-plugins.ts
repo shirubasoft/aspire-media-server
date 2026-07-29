@@ -29,8 +29,8 @@ const plugins: readonly JellyfinPlugin[] = [
     name: "File Transformation",
     directory: "FileTransformation",
     version: "2.5.11.0",
-    url: "https://github.com/IAmParadox27/jellyfin-plugin-file-transformation/releases/download/2.5.11.0/Release-10.11.10.zip",
-    md5: "9d586d77b00f31f6239a080ab91084ee",
+    url: "https://github.com/IAmParadox27/jellyfin-plugin-file-transformation/releases/download/2.5.11.0/Release-10.11.11.zip",
+    md5: "31fcd58d863995c0a3047d2266d72ef6",
   },
   {
     name: "Jellyfin Enhanced",
@@ -42,9 +42,9 @@ const plugins: readonly JellyfinPlugin[] = [
   {
     name: "Intro Skipper",
     directory: "IntroSkipper",
-    version: "1.10.11.19",
-    url: "https://github.com/intro-skipper/intro-skipper/releases/download/10.11/v1.10.11.19/intro-skipper-v1.10.11.19.zip",
-    md5: "bafed47c18b5159747e5da9ad777253e",
+    version: "1.10.11.22",
+    url: "https://github.com/intro-skipper/intro-skipper/releases/download/10.11/v1.10.11.22/intro-skipper-v1.10.11.22.zip",
+    md5: "7507b1915039c94cf67c450e4612fb37",
   },
   {
     name: "TheTVDB",

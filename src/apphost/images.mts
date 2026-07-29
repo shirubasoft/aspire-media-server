@@ -7,7 +7,7 @@
  */
 export const images = {
   gluetun:
-    "docker.io/qmcgaw/gluetun:latest@sha256:ad6b604e0cecc917a5cb6a8de55cd167ba415da8b7ec13456abb871a84be3c30",
+    "docker.io/qmcgaw/gluetun:latest@sha256:e67bd4c664b103a6112a20e44384ce1cbe9394c41eb4de918693035699509956",
   qbittorrent:
     "ghcr.io/linuxserver/qbittorrent:latest@sha256:b024436f8ca665d16d9a997d26fd27fdf867ee5566ba09f32764e7b2976d3e02",
   prowlarr:
@@ -17,7 +17,7 @@ export const images = {
   radarr:
     "ghcr.io/linuxserver/radarr:latest@sha256:e35056574cdc695a9ee745aa1ecda9eab3842450bf4b7b8471b023790fa3861d",
   lidarr:
-    "ghcr.io/linuxserver/lidarr:latest@sha256:f60ee67694bc4a218efe0fb2dc0b0021d193ac5f15be2638d17ab4eeb6966946",
+    "ghcr.io/linuxserver/lidarr:latest@sha256:60be9a1faad3dfba5a711163fc18526845e2ce7b50b463dd9effae7f766c9beb",
   bazarr:
     "ghcr.io/linuxserver/bazarr:latest@sha256:ab401a0f361cfad328e444838b13d5b334b189d0f556fc91a3623eb581df36df",
   jellyfin:
@@ -31,7 +31,7 @@ export const images = {
   tdarr:
     "ghcr.io/haveagitgat/tdarr:latest@sha256:eaeb1b39242685915b50f299a89f15e8ec4ef47f54d4b5b5ceee7e9d2a81c412",
   traefik:
-    "docker.io/library/traefik:v3.5@sha256:16acb89c6db341182970d6fdafece31303b0a380a8ed7aa51682e225229bf1d2",
+    "docker.io/library/traefik:v3.7@sha256:652929a140a32d7cafafb13c6cdfab5376cfeff800f51397b87b524501ed02a8",
   fail2ban:
     "docker.io/crazymax/fail2ban:latest@sha256:7cd8a427a44675397398a8dace2a3d755e62c72527f8730e4fd37697731a9321",
   diun:

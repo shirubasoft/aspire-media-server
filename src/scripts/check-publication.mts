@@ -79,6 +79,28 @@ assert.match(
   /homepage:[\s\S]*?target: "\/app\/config"[\s\S]*?read_only: true/u,
   "Homepage must mount its generated configuration read-only",
 );
+const notifierSection = /  notifier:\n([\s\S]*?)\n  diun:/u.exec(compose)?.[1];
+assert.ok(notifierSection, "Notification relay must be published");
+assert.match(
+  notifierSection,
+  /NTFY_TOKEN: "\$\{NTFY_TOKEN\}"/u,
+  "The ntfy token must remain an environment placeholder",
+);
+assert.doesNotMatch(
+  notifierSection,
+  /target: "\/(?:downloads|media)"/u,
+  "The notification relay must not receive media or download mounts",
+);
+assert.match(
+  compose,
+  /diun:[\s\S]*?DIUN_NOTIF_WEBHOOK_ENDPOINT: "http:\/\/notifier:8080\/diun"/u,
+  "DIUN must deliver image-update events through the internal relay",
+);
+assert.match(
+  compose,
+  /reconciler:[\s\S]*?NOTIFIER_URL: "http:\/\/notifier:8080"/u,
+  "Reconciliation transitions must use the internal notification relay",
+);
 assert.match(
   compose,
   /traefik:[\s\S]*?CF_DNS_API_TOKEN: "\$\{CLOUDFLARE_DNS_API_TOKEN\}"/u,

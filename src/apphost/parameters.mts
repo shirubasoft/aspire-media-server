@@ -26,6 +26,9 @@ export interface ArrspireParameters {
   readonly cloudflareDnsApiToken: ParameterResourcePromise;
   readonly ingressAdminUser: ParameterResourcePromise;
   readonly ingressAdminPassword: ParameterResourcePromise;
+  readonly ntfyEndpoint: ParameterResourcePromise;
+  readonly ntfyTopic: ParameterResourcePromise;
+  readonly ntfyToken: ParameterResourcePromise;
   readonly opensubtitlesComUser: ParameterResourcePromise;
   readonly opensubtitlesComPassword: ParameterResourcePromise;
   readonly opensubtitlesOrgUser: ParameterResourcePromise;
@@ -152,6 +155,18 @@ export function addArrspireParameters(
       generatedSecret,
       { secret: true, persist: true },
     ),
+    ntfyEndpoint: builder.addParameter("ntfy-endpoint", {
+      value: parameterValue("ntfy-endpoint", "https://ntfy.sh"),
+      publishValueAsDefault: true,
+    }),
+    ntfyTopic: builder.addParameter("ntfy-topic", {
+      value: parameterValue("ntfy-topic", ""),
+      secret: true,
+    }),
+    ntfyToken: builder.addParameter("ntfy-token", {
+      value: parameterValue("ntfy-token", ""),
+      secret: true,
+    }),
     opensubtitlesComUser: builder.addParameter("opensubtitlescom-user", {
       value: parameterValue("opensubtitlescom-user", ""),
       publishValueAsDefault: true,

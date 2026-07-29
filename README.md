@@ -56,8 +56,9 @@ For local development, override a parameter with
 same parameter as an environment variable using Aspire's configuration naming,
 for example `Parameters__timezone=UTC npm run deploy`. Useful names include
 `vpn-provider`, `vpn-countries`, `timezone`, `subtitle-languages`,
-`minimum-seeders`, and the supported subtitle-provider credentials. Dashes in
-parameter names become underscores in environment-variable names.
+`minimum-seeders`, `ntfy-endpoint`, `ntfy-topic`, `ntfy-token`, and the
+supported subtitle-provider credentials. Dashes in parameter names become
+underscores in environment-variable names.
 
 The default locale profile keeps the original Portuguese-oriented settings.
 Inspect the neutral baseline or apply it to the local Aspire secret store with:
@@ -98,6 +99,20 @@ at `home.<domain>`. It groups watch/request, library automation, download,
 processing, and operations surfaces; its Arr and qBittorrent widgets use
 root-only secret files generated during bootstrap. The portal has no direct
 host port and remains behind Arrspire ingress authentication.
+
+Push notifications are opt-in through any ntfy-compatible server. Set a
+private, hard-to-guess topic and optionally a bearer token:
+
+```bash
+aspire secret set "Parameters:ntfy-topic" "<private-topic>"
+aspire secret set "Parameters:ntfy-token" "<optional-access-token>"
+```
+
+Set `Parameters:ntfy-endpoint` when using a self-hosted server. Arrspire then
+notifies on reconciliation degradation, changed failures, recovery, and DIUN
+image updates. Repeated reconciliation runs with the same outcome are
+deduplicated. When no topic is configured, the relay remains a local no-op and
+does not lower readiness.
 
 For trusted local-browser HTTPS, generate a stable local certificate and add
 its CA to the current user's browser trust database, then restart the browser:
@@ -197,10 +212,11 @@ Sonarr, Radarr, Lidarr, and Prowlarr cannot be accidentally interchanged while
 still exposing the underlying Aspire builder.
 
 The control plane under `src/control-plane/` is a small compiled TypeScript
-container with three commands:
+container with four commands:
 
 - `bootstrap` performs deterministic pre-start file setup.
 - `reconcile` waits for real APIs and converges cross-service settings.
+- `serve-notifications` deduplicates state transitions and relays ntfy events.
 - `verify` is the real-stack acceptance suite used by E2E tests.
 
 CI starts an isolated stack twice and complements the API acceptance checks

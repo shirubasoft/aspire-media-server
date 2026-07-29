@@ -10,6 +10,7 @@ export { addFail2ban, type Fail2banResource } from "./fail2ban.mjs";
 export { addGluetun, type GluetunResource } from "./gluetun.mjs";
 export { addGrafana, type GrafanaResource } from "./grafana.mjs";
 export { addHomepage, type HomepageResource } from "./homepage.mjs";
+export { addNotifier, type NotifierResource } from "./notifier.mjs";
 export { addJellyfin, type JellyfinResource } from "./jellyfin.mjs";
 export { addSeerr, type SeerrResource } from "./seerr.mjs";
 export { addLidarr, type LidarrResource } from "./lidarr.mjs";

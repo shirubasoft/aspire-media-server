@@ -11,6 +11,7 @@ import {
   addGluetun,
   addGrafana,
   addHomepage,
+  addNotifier,
   addJellyfin,
   addLidarr,
   addPrometheus,
@@ -32,6 +33,7 @@ import {
   type GluetunResource,
   type GrafanaResource,
   type HomepageResource,
+  type NotifierResource,
   type JellyfinResource,
   type LidarrResource,
   type PrometheusResource,
@@ -68,6 +70,7 @@ export type ArrspireTopology = Readonly<{
   prometheus: PrometheusResource;
   grafana: GrafanaResource;
   homepage: HomepageResource;
+  notifier: NotifierResource;
   bootstrap: BootstrapResource;
   reconciler: ReconcilerResource;
   acceptance?: AcceptanceResource;
@@ -101,10 +104,13 @@ export async function addArrspireTopology(
   const tdarr = addTdarr(context);
   const traefik = addTraefik(context);
   const fail2ban = await addFail2ban(context, traefik);
-  const diun = addDiun(context);
   const prometheus = addPrometheus(context);
   const grafana = addGrafana(context, prometheus);
   const homepage = await addHomepage(context);
+  const notifier = await addNotifier(context, {
+    homepage: homepage.http,
+  });
+  const diun = await addDiun(context, notifier);
 
   const applicationEndpoints = {
     sonarr: sonarr.http,
@@ -145,6 +151,7 @@ export async function addArrspireTopology(
     prometheus.resource,
     grafana.resource,
     homepage.resource,
+    notifier.resource,
   ];
 
   await Promise.all(
@@ -164,10 +171,12 @@ export async function addArrspireTopology(
     jellyfin.resource,
     seerr.resource,
     tdarr.resource,
+    notifier.resource,
   ];
   const reconciliationEndpoints = {
     gluetunProxy: gluetun.httpProxy,
     ingress: traefik.https,
+    notifier: notifier.http,
     ...applicationEndpoints,
   };
   await recyclarr.sync.waitFor(sonarr.resource);
@@ -210,6 +219,7 @@ export async function addArrspireTopology(
       prometheus.resource,
       grafana.resource,
       homepage.resource,
+      notifier.resource,
     ].map((resource) => withComposeRestart(resource)),
     withComposeInit(seerr.resource),
     withComposeRestart(reconciler.resource, "on-failure:5"),
@@ -234,6 +244,7 @@ export async function addArrspireTopology(
     prometheus,
     grafana,
     homepage,
+    notifier,
     bootstrap,
     reconciler,
     ...(acceptance === undefined ? {} : { acceptance }),

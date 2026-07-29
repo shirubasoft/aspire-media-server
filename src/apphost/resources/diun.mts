@@ -1,5 +1,7 @@
 import { join } from "node:path";
+import { refExpr } from "../../.aspire/modules/aspire.mjs";
 import { images } from "../images.mjs";
+import type { NotifierResource } from "./notifier.mjs";
 
 import {
   type ArrspireResource,
@@ -9,7 +11,11 @@ import {
 
 export type DiunResource = ArrspireResource<"diun">;
 
-export function addDiun(context: ResourceContext): DiunResource {
+export async function addDiun(
+  context: ResourceContext,
+  notifier: NotifierResource,
+): Promise<DiunResource> {
+  const notifierEndpoint = await notifier.http;
   const resource = context.builder
     .addContainer("diun", images.diun)
     .withEnvironment("TZ", context.parameters.timezone)
@@ -22,12 +28,18 @@ export function addDiun(context: ResourceContext): DiunResource {
       "DIUN_PROVIDERS_DOCKER_WATCHBYDEFAULT",
       "true",
     )
+    .withEnvironment(
+      "DIUN_NOTIF_WEBHOOK_ENDPOINT",
+      refExpr`${notifierEndpoint}/diun`,
+    )
+    .withEnvironment("DIUN_NOTIF_WEBHOOK_METHOD", "POST")
     .withBindMount(join(context.paths.data, "diun"), "/data")
     .withBindMount(
       context.paths.containerSocket,
       "/var/run/docker.sock",
       { isReadOnly: true },
-    );
+    )
+    .waitFor(notifier.resource);
 
   return createResource("diun", resource);
 }

@@ -360,11 +360,51 @@ function optionalResults(
   );
 }
 
+async function appendNotificationResult(
+  results: ReconciliationResult[],
+): Promise<void> {
+  const notificationUrl = optional("NOTIFIER_URL");
+  if (!notificationUrl) {
+    return;
+  }
+  try {
+    const response = await fetch(`${notificationUrl}/reconciliation`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ results }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) {
+      throw new Error(
+        `notification relay returned HTTP ${String(response.status)}`,
+      );
+    }
+    const delivery = (await response.json()) as {
+      readonly configured?: unknown;
+    };
+    if (delivery.configured === true) {
+      results.push({
+        name: "notification:ntfy",
+        required: false,
+        status: "ready",
+      });
+    }
+  } catch (error) {
+    results.push({
+      name: "notification:ntfy",
+      required: false,
+      status: "failed",
+      reason: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 export async function reconcile(): Promise<void> {
   const results: ReconciliationResult[] = [];
   try {
     await reconcileCore(results);
     results.push(...optionalResults(true));
+    await appendNotificationResult(results);
     const summary = await writeReconciliationStatus(results);
     log.info("Reconciliation summary", {
       status: summary.status,
@@ -383,6 +423,7 @@ export async function reconcile(): Promise<void> {
       });
     }
     results.push(...optionalResults(false));
+    await appendNotificationResult(results);
     const summary = await writeReconciliationStatus(results);
     log.error("Reconciliation summary", {
       status: summary.status,

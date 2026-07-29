@@ -71,12 +71,50 @@ async function containsDll(path: string): Promise<boolean> {
   }
 }
 
+export function obsoleteJellyfinPluginDirectories(
+  directory: string,
+  version: string,
+  entries: readonly string[],
+): readonly string[] {
+  const prefix = `${directory}_`;
+  const target = `${prefix}${version}`;
+  return entries.filter(
+    (entry) => entry.startsWith(prefix) && entry !== target,
+  );
+}
+
+async function removeObsoleteVersions(
+  root: string,
+  plugin: JellyfinPlugin,
+): Promise<void> {
+  const entries = await readdir(root, { withFileTypes: true });
+  const obsolete = new Set(
+    obsoleteJellyfinPluginDirectories(
+      plugin.directory,
+      plugin.version,
+      entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name),
+    ),
+  );
+  for (const entry of entries) {
+    if (entry.isDirectory() && obsolete.has(entry.name)) {
+      await rm(join(root, entry.name), { recursive: true, force: true });
+    }
+  }
+  if (obsolete.size > 0) {
+    log.info("Removed superseded Jellyfin plugin versions", {
+      plugin: plugin.name,
+      removed: obsolete.size,
+    });
+  }
+}
+
 async function installPlugin(
   root: string,
   plugin: JellyfinPlugin,
 ): Promise<void> {
   const target = join(root, `${plugin.directory}_${plugin.version}`);
   if (await containsDll(target)) {
+    await removeObsoleteVersions(root, plugin);
     log.info("Jellyfin plugin already installed", { plugin: plugin.name });
     return;
   }
@@ -113,6 +151,7 @@ async function installPlugin(
     }
     await rm(target, { recursive: true, force: true });
     await rename(extracted, target);
+    await removeObsoleteVersions(root, plugin);
     log.info("Jellyfin plugin installed", {
       plugin: plugin.name,
       version: plugin.version,

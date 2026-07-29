@@ -1,5 +1,6 @@
 import { createHash, pbkdf2Sync, randomBytes } from "node:crypto";
-import { chown, mkdir } from "node:fs/promises";
+import { chown, lchown, lstat, mkdir, opendir } from "node:fs/promises";
+import { join } from "node:path";
 
 import { optional, required } from "./environment.js";
 import { readArrApiKey } from "./api-key.js";
@@ -50,6 +51,7 @@ interface RuntimeDirectory {
   readonly path: string;
   readonly uid: number;
   readonly gid: number;
+  readonly recursive?: boolean;
 }
 
 export function runtimeDirectoryPlan(): readonly RuntimeDirectory[] {
@@ -63,7 +65,9 @@ export function runtimeDirectoryPlan(): readonly RuntimeDirectory[] {
     { path: "/data/recyclarr", uid: 1000, gid: 1000 },
     // Seerr's official rootless image runs as UID/GID 1000. The legacy
     // Jellyseerr directory is intentionally retained for in-place migration.
-    { path: "/data/jellyseerr", uid: 1000, gid: 1000 },
+    // Normalize its existing contents as well because the old image wrote
+    // them as root, while Seerr needs to update the database and logs.
+    { path: "/data/jellyseerr", uid: 1000, gid: 1000, recursive: true },
     { path: "/media/movies", uid: 1000, gid: 1000 },
     { path: "/media/tv", uid: 1000, gid: 1000 },
     { path: "/media/music", uid: 1000, gid: 1000 },
@@ -73,6 +77,24 @@ export function runtimeDirectoryPlan(): readonly RuntimeDirectory[] {
     { path: "/downloads/radarr", uid: 1000, gid: 1000 },
     { path: "/downloads/lidarr", uid: 1000, gid: 1000 },
   ];
+}
+
+async function chownTree(path: string, uid: number, gid: number): Promise<void> {
+  const metadata = await lstat(path);
+  if (metadata.isSymbolicLink()) {
+    await lchown(path, uid, gid);
+    return;
+  }
+
+  await chown(path, uid, gid);
+  if (!metadata.isDirectory()) {
+    return;
+  }
+
+  const directory = await opendir(path);
+  for await (const entry of directory) {
+    await chownTree(join(path, entry.name), uid, gid);
+  }
 }
 
 interface ArrBootstrap {
@@ -302,7 +324,11 @@ export async function bootstrap(): Promise<void> {
   );
   for (const directory of runtimeDirectoryPlan()) {
     await mkdir(directory.path, { recursive: true });
-    await chown(directory.path, directory.uid, directory.gid);
+    if (directory.recursive === true) {
+      await chownTree(directory.path, directory.uid, directory.gid);
+    } else {
+      await chown(directory.path, directory.uid, directory.gid);
+    }
   }
   await installJellyfinPlugins();
 

@@ -62,6 +62,10 @@ export function addTraefik(
       "cloudflare",
     )
     .withEnvironment(
+      "TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_DNSCHALLENGE_RESOLVERS",
+      "1.1.1.1:53,8.8.8.8:53",
+    )
+    .withEnvironment(
       "CF_DNS_API_TOKEN",
       context.parameters.cloudflareDnsApiToken,
     )

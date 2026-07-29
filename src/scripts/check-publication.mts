@@ -84,6 +84,11 @@ assert.match(
   /TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_DNSCHALLENGE: "true"/u,
   "Traefik must activate the DNS-01 challenge in static configuration",
 );
+assert.match(
+  compose,
+  /TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_DNSCHALLENGE_RESOLVERS: "1\.1\.1\.1:53,8\.8\.8\.8:53"/u,
+  "Traefik must verify DNS-01 propagation through public resolvers",
+);
 
 for (const match of compose.matchAll(/^\s+image: "([^"]+)"$/gmu)) {
   const image = match[1] ?? "";

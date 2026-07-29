@@ -19,7 +19,7 @@
     "control-plane:test": "npm run test:e2e",
     "lint": "npm run aspire:lint && npm run control-plane:lint",
     "test": "npm run test:e2e",
-    "test:unit": "npm run build && node --test dist/control-plane/test/**/*.test.js",
+    "test:unit": "npm run build && node --test dist/apphost/apphost/test/**/*.test.mjs dist/control-plane/test/**/*.test.js",
     "test:e2e": "npm run build && node --test --test-concurrency=1 dist/control-plane/test/**/*.e2e.js",
     "predev": "npm run aspire:restore && npm run lint",
     "dev": "npm run aspire:start",

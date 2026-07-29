@@ -50,6 +50,23 @@ jobs:
       - name: Run unit tests
         run: npm run test:unit
 
+      - name: Validate deployment plan with a host-non-writable bind mount
+        shell: bash
+        run: |
+          test_root="$(mktemp -d)"
+          cleanup() {
+            chmod u+w "$test_root/downloads"
+            rmdir "$test_root/data" "$test_root/media" "$test_root/downloads"
+            rmdir "$test_root"
+          }
+          trap cleanup EXIT
+          mkdir "$test_root/data" "$test_root/media" "$test_root/downloads"
+          chmod a-w "$test_root/downloads"
+          ARRSPIRE_DATA_PATH="$test_root/data" \
+          ARRSPIRE_MEDIA_PATH="$test_root/media" \
+          ARRSPIRE_DOWNLOADS_PATH="$test_root/downloads" \
+            aspire deploy --list-steps --non-interactive
+
       - name: Validate Compose publication
         run: npm run publish && npm run publication:check
 

@@ -1,5 +1,5 @@
 import { createHash, pbkdf2Sync, randomBytes } from "node:crypto";
-import { mkdir } from "node:fs/promises";
+import { chown, mkdir } from "node:fs/promises";
 
 import { optional, required } from "./environment.js";
 import { writeIfChanged, writeOnce } from "./files.js";
@@ -37,6 +37,25 @@ const dataDirectories = [
   "traefik/dynamic",
   "traefik/logs",
 ] as const;
+
+interface RuntimeDirectory {
+  readonly path: string;
+  readonly uid: number;
+  readonly gid: number;
+}
+
+export function runtimeDirectoryPlan(): readonly RuntimeDirectory[] {
+  return [
+    { path: "/media/movies", uid: 1000, gid: 1000 },
+    { path: "/media/tv", uid: 1000, gid: 1000 },
+    { path: "/media/music", uid: 1000, gid: 1000 },
+    { path: "/downloads", uid: 1000, gid: 1000 },
+    { path: "/downloads/incomplete", uid: 1000, gid: 1000 },
+    { path: "/downloads/sonarr", uid: 1000, gid: 1000 },
+    { path: "/downloads/radarr", uid: 1000, gid: 1000 },
+    { path: "/downloads/lidarr", uid: 1000, gid: 1000 },
+  ];
+}
 
 interface ArrBootstrap {
   readonly name: "sonarr" | "radarr" | "lidarr" | "prowlarr";
@@ -246,15 +265,10 @@ export async function bootstrap(): Promise<void> {
   await Promise.all(
     dataDirectories.map((path) => mkdir(`/data/${path}`, { recursive: true })),
   );
-  await Promise.all([
-    mkdir("/media/movies", { recursive: true }),
-    mkdir("/media/tv", { recursive: true }),
-    mkdir("/media/music", { recursive: true }),
-    mkdir("/downloads/incomplete", { recursive: true }),
-    mkdir("/downloads/sonarr", { recursive: true }),
-    mkdir("/downloads/radarr", { recursive: true }),
-    mkdir("/downloads/lidarr", { recursive: true }),
-  ]);
+  for (const directory of runtimeDirectoryPlan()) {
+    await mkdir(directory.path, { recursive: true });
+    await chown(directory.path, directory.uid, directory.gid);
+  }
   await installJellyfinPlugins();
 
   const password = required("QBITTORRENT_PASSWORD");

@@ -42,3 +42,27 @@ void test("protects and routes the network-only Aspire dashboard", () => {
     /url: "http:\/\/arrspire-dashboard:18888"/u,
   );
 });
+
+void test("lets Duplicati use its own Bearer authentication", () => {
+  const configuration = traefikDynamicConfiguration(
+    "localhost",
+    {
+      duplicati: {
+        url: "http://duplicati:8200",
+        requiresIngressAuthentication: false,
+      },
+    },
+    "operator",
+    "secret",
+  );
+
+  assert.match(
+    configuration,
+    /duplicati:\n      rule: 'Host\(`duplicati\.localhost`\)'[\s\S]*?service: duplicati\n      tls: \{\}\n/u,
+  );
+  const router = configuration.match(
+    /    duplicati:\n(?<configuration>(?:      .*\n)+)\n/u,
+  );
+  assert.ok(router?.groups?.configuration);
+  assert.doesNotMatch(router.groups.configuration, /admin-auth/u);
+});

@@ -111,11 +111,11 @@ export async function addArrspireTopology(
     jellyseerr: jellyseerr.http,
     qbittorrent: qbittorrent.http,
     tdarr: tdarr.webUi,
+    duplicati: duplicati.http,
   };
 
   const bootstrap = addBootstrap(context, {
     ...applicationEndpoints,
-    duplicati: duplicati.http,
     prometheus: prometheus.http,
     grafana: grafana.http,
   });

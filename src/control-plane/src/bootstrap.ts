@@ -140,7 +140,10 @@ function routedServices(): Readonly<Record<string, RoutedService>> {
     },
     duplicati: {
       url: required("DUPLICATI_URL"),
-      requiresIngressAuthentication: true,
+      // Duplicati authenticates API calls with a Bearer token. Applying
+      // Traefik BasicAuth here would consume the same Authorization header
+      // and make the web UI fail immediately after a successful login.
+      requiresIngressAuthentication: false,
     },
     grafana: {
       url: required("GRAFANA_URL"),

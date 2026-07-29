@@ -11,6 +11,7 @@ import {
   optional,
   required,
 } from "./environment.js";
+import { DuplicatiClient } from "./duplicati.js";
 import { waitForHttp } from "./http.js";
 import { JellyfinClient } from "./jellyfin.js";
 import { JellyseerrClient } from "./jellyseerr.js";
@@ -36,6 +37,7 @@ interface ServiceUrls {
   readonly jellyseerr: string;
   readonly qbittorrent: string;
   readonly tdarr: string;
+  readonly duplicati: string;
 }
 
 async function integration(
@@ -98,6 +100,7 @@ function loadServiceUrls(): ServiceUrls {
     jellyseerr: required("JELLYSEERR_URL"),
     qbittorrent: required("QBITTORRENT_URL"),
     tdarr: required("TDARR_URL"),
+    duplicati: required("DUPLICATI_URL"),
   };
 }
 
@@ -112,6 +115,7 @@ async function waitForServices(urls: ServiceUrls): Promise<void> {
     waitForHttp("Jellyfin", `${urls.jellyfin}/health`),
     waitForHttp("Jellyseerr", `${urls.jellyseerr}/api/v1/status`),
     waitForHttp("Tdarr", `${urls.tdarr}/api/v2/status`),
+    waitForHttp("Duplicati", `${urls.duplicati}/ngclient/`),
   ]);
 }
 
@@ -239,6 +243,11 @@ async function reconcileCore(results: ReconciliationResult[]): Promise<void> {
     jellyseerrKey,
   );
   const tdarr = new TdarrClient(urls.tdarr);
+  const duplicati = new DuplicatiClient(
+    urls.duplicati,
+    required("DUPLICATI_WEB_PASSWORD"),
+    required("DUPLICATI_ENCRYPTION_KEY"),
+  );
   let prowlarrOptionalResults: readonly ReconciliationResult[] = [];
   await runRequiredStage(results, [
     {
@@ -318,6 +327,10 @@ async function reconcileCore(results: ReconciliationResult[]): Promise<void> {
     {
       name: "tdarr",
       operation: () => tdarr.reconcile(),
+    },
+    {
+      name: "duplicati",
+      operation: () => duplicati.reconcile(),
     },
   ]);
   results.push(...prowlarrOptionalResults);

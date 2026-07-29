@@ -54,6 +54,11 @@ assert.deepEqual(
 );
 assert.match(compose, /--api\.insecure=false/u);
 assert.doesNotMatch(compose, /--api\.insecure=true/u);
+assert.match(
+  compose,
+  /duplicati:[\s\S]*?DUPLICATI__WEBSERVICE_ALLOWED_HOSTNAMES: "\*"/u,
+  "Duplicati must accept its authenticated ingress hostname",
+);
 
 for (const match of compose.matchAll(/^\s+image: "([^"]+)"$/gmu)) {
   const image = match[1] ?? "";

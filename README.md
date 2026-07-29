@@ -32,14 +32,22 @@ and the latest stable Aspire CLI.
 cd src
 npm ci
 aspire restore --non-interactive
-aspire secret set "Parameters:vpn-wireguard-key" "<wireguard-private-key>"
+npm run setup
+npm run doctor
 npm run dev
 ```
 
-The VPN key is the only value without a safe default. Aspire generates and
-persists the administrative-ingress, Jellyfin, qBittorrent, Duplicati, and
-Grafana passwords in its secret store. Existing values under `~/.aspire` are
-reused automatically.
+The guided setup masks secret input, validates all answers before writing,
+persists service parameters in Aspire's local secret store, and saves only
+non-secret path choices in ignored `.arrspire/config.json`. The VPN key is the
+only value without a safe default. Aspire generates and persists the
+administrative-ingress, Jellyfin, qBittorrent, Duplicati, and Grafana passwords.
+Existing values under `~/.aspire` are reused automatically.
+
+`npm run doctor` is read-only. It checks the Node/Aspire/container runtime,
+Compose, VPN key shape, bind-mount permissions and capacity, socket, ingress
+ports, DNS, TLS, optional ntfy configuration, and persisted readiness. Each
+warning or failure includes the next corrective command.
 
 Runtime data defaults to `data/` in this repository, media to `~/media`, and
 downloads to `~/downloads`. Override them without editing the AppHost:
@@ -50,6 +58,10 @@ ARRSPIRE_MEDIA_PATH=/srv/media \
 ARRSPIRE_DOWNLOADS_PATH=/srv/downloads \
 npm run dev
 ```
+
+Environment variables take precedence over `.arrspire/config.json`. For
+automation, protected `Parameters__*` variables and path overrides can drive
+the same validated workflow with `npm run setup -- --non-interactive`.
 
 For local development, override a parameter with
 `aspire secret set "Parameters:<name>" "<value>"`. For deployment, pass the

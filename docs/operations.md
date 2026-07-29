@@ -2,6 +2,22 @@
 
 ## Access boundary and first-run handoff
 
+Run `npm run setup` for the guided first-run flow and `npm run doctor` before
+starting or deploying. Setup validates all inputs before it writes them,
+stores parameters in the Aspire secret store, creates the selected
+data/media/download directories, and writes only non-secret path choices to
+ignored `src/.arrspire/config.json`. Environment path overrides remain
+higher-priority. `npm run setup -- --non-interactive` uses existing Aspire
+values plus protected `Parameters__*` and `ARRSPIRE_*_PATH` environment
+variables for automation.
+
+Doctor never changes configuration. It verifies the runtime toolchain,
+container engine and Compose, secret presence and structure, paths and free
+space, container socket, ingress ports, DNS, TLS inputs/certificate, ntfy
+settings, and the latest bootstrap/reconciliation state. A missing deployment
+or local certificate is a warning during first run; an invalid required VPN key
+or inaccessible bind mount is a failure.
+
 Traefik is the only Arrspire application service published on host ports by
 default (`80` and `443`, or `8080` and `8443` when rootless Podman is
 detected). Set `ARRSPIRE_INGRESS_HTTP_PORT` and

@@ -61,7 +61,7 @@ function validateLocale(name: string, locale: string): void {
   }
 }
 
-function validateWireguardKey(key: string): void {
+export function validateWireguardKey(key: string): void {
   let decoded: Buffer;
   try {
     decoded = Buffer.from(key, "base64");

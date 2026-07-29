@@ -103,6 +103,27 @@ The certificate and private CA stay under ignored
 `data/traefik/dynamic/certs/` with restrictive permissions. Do not copy the
 local CA private key to another machine.
 
+For clients that cannot trust a private CA, Arrspire can instead request
+publicly trusted certificates through Cloudflare DNS and Let's Encrypt. This
+mode remains LAN-only when the DNS records resolve to a private address and no
+router ports are forwarded:
+
+```bash
+Parameters__traefik_domain=home.example.com \
+Parameters__traefik_tls_mode=cloudflare-acme \
+Parameters__traefik_acme_email=operator@example.com \
+Parameters__cloudflare_dns_api_token="<scoped-token>" \
+npm run deploy
+```
+
+Create DNS-only records for the service hostnames (or a scoped wildcard such
+as `*.home.example.com`) pointing to the server's LAN address. The Cloudflare
+token needs only `Zone:Read` and `DNS:Edit` for the selected zone. The domain,
+email, token, server address, and ingress ports are deployment inputs; none are
+hardcoded into the ACME integration. Keep the token out of shell history and
+source control by supplying it through the Aspire secret store or a protected
+deployment environment.
+
 Local Aspire users can rerun the completed reconciler with
 `aspire resource reconciler start --non-interactive`; its structured summary
 remains visible in the Aspire dashboard.

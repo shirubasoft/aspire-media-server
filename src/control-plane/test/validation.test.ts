@@ -103,3 +103,48 @@ void test("optional credential pairs are visible and partial pairs fail", () => 
     /must either both be set or both be empty/u,
   );
 });
+
+void test("requires complete Cloudflare ACME configuration only in public TLS mode", () => {
+  assert.doesNotThrow(() => validateConfiguration(validEnvironment()));
+  assert.throws(
+    () =>
+      validateConfiguration({
+        ...validEnvironment(),
+        TRAEFIK_TLS_MODE: "unsupported",
+      }),
+    /TRAEFIK_TLS_MODE must be one of/u,
+  );
+  assert.throws(
+    () =>
+      validateConfiguration({
+        ...validEnvironment(),
+        TRAEFIK_TLS_MODE: "cloudflare-acme",
+      }),
+    /publicly registered domain/u,
+  );
+
+  const publicTls = {
+    ...validEnvironment(),
+    TRAEFIK_DOMAIN: "home.example.com",
+    TRAEFIK_TLS_MODE: "cloudflare-acme",
+    TRAEFIK_ACME_EMAIL: "operator@example.com",
+    CF_DNS_API_TOKEN: "scoped-token",
+  };
+  assert.doesNotThrow(() => validateConfiguration(publicTls));
+  assert.throws(
+    () =>
+      validateConfiguration({
+        ...publicTls,
+        TRAEFIK_ACME_EMAIL: "",
+      }),
+    /TRAEFIK_ACME_EMAIL/u,
+  );
+  assert.throws(
+    () =>
+      validateConfiguration({
+        ...publicTls,
+        CF_DNS_API_TOKEN: "",
+      }),
+    /CF_DNS_API_TOKEN/u,
+  );
+});

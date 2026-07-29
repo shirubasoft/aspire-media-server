@@ -45,6 +45,32 @@ void test("protects and routes the network-only Aspire dashboard", () => {
     configuration,
     /url: "http:\/\/arrspire-dashboard:18888"/u,
   );
+  assert.match(configuration, /tls: \{\}/u);
+  assert.doesNotMatch(configuration, /certResolver/u);
+});
+
+void test("uses the ACME resolver only when public TLS is enabled", () => {
+  const configuration = traefikDynamicConfiguration(
+    "home.example.com",
+    {
+      jellyfin: {
+        url: "http://jellyfin:8096",
+        requiresIngressAuthentication: false,
+      },
+    },
+    "operator",
+    "secret",
+    "cloudflare-acme",
+  );
+
+  assert.match(
+    configuration,
+    /jellyfin:\n[\s\S]*?tls:\n        certResolver: letsencrypt/u,
+  );
+  assert.match(
+    configuration,
+    /traefik-dashboard:\n[\s\S]*?tls:\n        certResolver: letsencrypt/u,
+  );
 });
 
 void test("lets Duplicati use its own Bearer authentication", () => {

@@ -8,6 +8,13 @@ import { defaultTraefikDomain } from "../apphost/ingress.mjs";
 import { generateLocalTls } from "../apphost/local-tls.mjs";
 
 const execute = promisify(execFile);
+const tlsMode =
+  process.env.Parameters__traefik_tls_mode ?? "local";
+if (tlsMode !== "local") {
+  throw new Error(
+    `Local CA generation is disabled when traefik-tls-mode is ${tlsMode}`,
+  );
+}
 const domain =
   process.argv[2] ??
   process.env.Parameters__traefik_domain ??

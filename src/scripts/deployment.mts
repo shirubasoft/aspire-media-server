@@ -86,6 +86,42 @@ async function output(
   });
 }
 
+async function parameterSecretEnvironment(): Promise<NodeJS.ProcessEnv> {
+  let values: unknown;
+  try {
+    values = JSON.parse(
+      await output("aspire", [
+        "secret",
+        "list",
+        "--format",
+        "Json",
+        "--non-interactive",
+        "--nologo",
+      ]),
+    ) as unknown;
+  } catch {
+    return {};
+  }
+  if (typeof values !== "object" || values === null || Array.isArray(values)) {
+    return {};
+  }
+
+  const environment: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(values)) {
+    if (!key.startsWith("Parameters:") || typeof value !== "string") {
+      continue;
+    }
+    const parameterName = key
+      .slice("Parameters:".length)
+      .replaceAll("-", "_");
+    const environmentName = `Parameters__${parameterName}`;
+    if (process.env[environmentName] === undefined) {
+      environment[environmentName] = value;
+    }
+  }
+  return environment;
+}
+
 async function composeArguments(
   engine: Engine,
   command: readonly string[],
@@ -139,18 +175,24 @@ async function containerEngine(): Promise<Engine> {
 }
 
 async function publish(): Promise<void> {
-  await run("aspire", [
-    "publish",
-    "--output-path",
-    outputDirectory,
-    "--environment",
-    environment,
-    "--non-interactive",
-  ]);
+  await run(
+    "aspire",
+    [
+      "publish",
+      "--output-path",
+      outputDirectory,
+      "--environment",
+      environment,
+      "--non-interactive",
+    ],
+    false,
+    await parameterSecretEnvironment(),
+  );
   await chmod(publishEnvironmentFile, 0o600);
 }
 
 async function deploy(engine: Engine): Promise<void> {
+  const secretEnvironment = await parameterSecretEnvironment();
   await run(
     "aspire",
     [
@@ -162,7 +204,7 @@ async function deploy(engine: Engine): Promise<void> {
       "--non-interactive",
     ],
     false,
-    { ASPIRE_CONTAINER_RUNTIME: engine },
+    { ...secretEnvironment, ASPIRE_CONTAINER_RUNTIME: engine },
   );
   await chmod(deploymentEnvironmentFile, 0o600);
 }

@@ -35,7 +35,7 @@ void test("protects and routes the network-only Aspire dashboard", () => {
     {
       aspire: {
         url: "http://arrspire-dashboard:18888",
-        requiresIngressAuthentication: true,
+        authentication: "ingress",
       },
     },
     "operator",
@@ -61,7 +61,7 @@ void test("uses the ACME resolver only when public TLS is enabled", () => {
     {
       jellyfin: {
         url: "http://jellyfin:8096",
-        requiresIngressAuthentication: false,
+        authentication: "service",
       },
     },
     "operator",
@@ -85,7 +85,7 @@ void test("lets Duplicati use its own Bearer authentication", () => {
     {
       duplicati: {
         url: "http://duplicati:8200",
-        requiresIngressAuthentication: false,
+        authentication: "service",
       },
     },
     "operator",
@@ -109,7 +109,7 @@ void test("keeps the legacy Jellyseerr hostname as a Seerr alias", () => {
     {
       seerr: {
         url: "http://seerr:5055",
-        requiresIngressAuthentication: false,
+        authentication: "service",
         aliases: ["jellyseerr"],
       },
     },

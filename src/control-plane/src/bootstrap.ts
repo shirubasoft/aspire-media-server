@@ -8,6 +8,11 @@ import { writeIfChanged, writeOnce } from "./files.js";
 import { installJellyfinPlugins } from "./jellyfin-plugins.js";
 import { log } from "./log.js";
 import { reconcileRecyclarr } from "./recyclarr.js";
+import {
+  type AuthenticationMode,
+  requiresIngressAuthentication,
+  serviceSurface,
+} from "./service-surfaces.js";
 import { writeBootstrapStatus } from "./status.js";
 import {
   resolveTraefikTlsMode,
@@ -162,7 +167,7 @@ function arrConfig({ name, port }: ArrBootstrap): string {
 
 interface RoutedService {
   readonly url: string;
-  readonly requiresIngressAuthentication: boolean;
+  readonly authentication: AuthenticationMode;
   readonly aliases?: readonly string[];
 }
 
@@ -173,59 +178,59 @@ function routedServices(): Readonly<Record<string, RoutedService>> {
         "ASPIRE_DASHBOARD_URL",
         "http://arrspire-dashboard:18888",
       ),
-      requiresIngressAuthentication: true,
+      authentication: serviceSurface("aspire").authentication,
     },
     bazarr: {
       url: required("BAZARR_URL"),
-      requiresIngressAuthentication: true,
+      authentication: serviceSurface("bazarr").authentication,
     },
     duplicati: {
       url: required("DUPLICATI_URL"),
       // Duplicati authenticates API calls with a Bearer token. Applying
       // Traefik BasicAuth here would consume the same Authorization header
       // and make the web UI fail immediately after a successful login.
-      requiresIngressAuthentication: false,
+      authentication: serviceSurface("duplicati").authentication,
     },
     grafana: {
       url: required("GRAFANA_URL"),
-      requiresIngressAuthentication: true,
+      authentication: serviceSurface("grafana").authentication,
     },
     jellyfin: {
       url: required("JELLYFIN_URL"),
-      requiresIngressAuthentication: false,
+      authentication: serviceSurface("jellyfin").authentication,
     },
     seerr: {
       url: required("SEERR_URL"),
-      requiresIngressAuthentication: false,
+      authentication: serviceSurface("seerr").authentication,
       aliases: ["jellyseerr"],
     },
     lidarr: {
       url: required("LIDARR_URL"),
-      requiresIngressAuthentication: true,
+      authentication: serviceSurface("lidarr").authentication,
     },
     prometheus: {
       url: required("PROMETHEUS_URL"),
-      requiresIngressAuthentication: true,
+      authentication: serviceSurface("prometheus").authentication,
     },
     prowlarr: {
       url: required("PROWLARR_URL"),
-      requiresIngressAuthentication: true,
+      authentication: serviceSurface("prowlarr").authentication,
     },
     qbittorrent: {
       url: required("QBITTORRENT_URL"),
-      requiresIngressAuthentication: true,
+      authentication: serviceSurface("qbittorrent").authentication,
     },
     radarr: {
       url: required("RADARR_URL"),
-      requiresIngressAuthentication: true,
+      authentication: serviceSurface("radarr").authentication,
     },
     sonarr: {
       url: required("SONARR_URL"),
-      requiresIngressAuthentication: true,
+      authentication: serviceSurface("sonarr").authentication,
     },
     tdarr: {
       url: required("TDARR_URL"),
-      requiresIngressAuthentication: true,
+      authentication: serviceSurface("tdarr").authentication,
     },
   };
 }
@@ -249,7 +254,7 @@ export function traefikDynamicConfiguration(
       entryPoints: [websecure]
       service: ${name}
 ${tlsConfiguration}
-${service.requiresIngressAuthentication ? "      middlewares: [admin-auth]" : ""}`);
+${requiresIngressAuthentication(service.authentication) ? "      middlewares: [admin-auth]" : ""}`);
     serviceLines.push(`    ${name}:
       loadBalancer:
         servers:

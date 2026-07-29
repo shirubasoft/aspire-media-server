@@ -8,6 +8,11 @@ import {
   httpsServiceUrl,
   publishedTraefikHttpsPort,
 } from "../apphost/ingress.mjs";
+import {
+  authenticationDescription,
+  credentialSources,
+  serviceSurfaces,
+} from "../control-plane/src/service-surfaces.js";
 
 type Action = "deploy" | "down" | "publish" | "repair" | "status";
 type Engine = "docker" | "podman";
@@ -282,63 +287,18 @@ async function printStatus(engine?: Engine): Promise<void> {
     values.BOOTSTRAP_BINDMOUNT_0 ??
     process.env.ARRSPIRE_DATA_PATH ??
     resolve("..", "data");
-  const accessRows = [
-    ["Jellyfin", false],
-    ["Seerr", false],
-    ["Sonarr", true],
-    ["Radarr", true],
-    ["Lidarr", true],
-    ["Prowlarr", true],
-    ["Bazarr", true],
-    ["qBittorrent", true],
-    ["Duplicati", true],
-    ["Tdarr", true],
-    ["Prometheus", true],
-    ["Grafana", true],
-    ["Aspire dashboard", true],
-    ["Traefik dashboard", true],
-  ] as const;
   console.log("\nArrspire access (HTTPS)");
   console.table(
-    accessRows.map(([label, ingressAuthentication]) => {
-      const service = label.toLowerCase().split(" ")[0];
+    serviceSurfaces.map((surface) => {
       return {
-        service: label,
-        url: httpsServiceUrl(service, domain, httpsPort),
-        authentication: ingressAuthentication
-          ? "Arrspire ingress credentials"
-          : "Service credentials",
+        service: surface.label,
+        url: httpsServiceUrl(surface.name, domain, httpsPort),
+        authentication: authenticationDescription(surface.authentication),
       };
     }),
   );
   console.log("Initial credential sources");
-  console.table([
-    {
-      surface: "Administrative ingress",
-      username: "Parameters:ingress-admin-user",
-      password: "Parameters:ingress-admin-password",
-    },
-    {
-      surface: "Jellyfin / Seerr",
-      username: "Parameters:jellyfin-admin-user",
-      password: "Parameters:jellyfin-admin-password",
-    },
-    {
-      surface: "qBittorrent",
-      username: "admin",
-      password: "Parameters:qbittorrent-password",
-    },
-    {
-      surface: "Duplicati",
-      username: "(none)",
-      password: "Parameters:duplicati-web-password",
-    },
-    {
-      surface: "Grafana",
-      username: "admin",
-      password: "Parameters:grafana-admin-password",
-    },
-  ]);
+  console.table(credentialSources);
 
   const [bootstrap, reconciliation] = await Promise.all([
     readStatusFile(resolve(dataPath, "status", "bootstrap.json")),

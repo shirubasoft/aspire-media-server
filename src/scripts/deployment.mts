@@ -2,6 +2,11 @@ import { spawn } from "node:child_process";
 import { access, chmod, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
+import {
+  httpsServiceUrl,
+  publishedTraefikHttpsPort,
+} from "../apphost/ingress.mjs";
+
 type Action = "deploy" | "down" | "publish" | "repair" | "status";
 type Engine = "docker" | "podman";
 
@@ -169,6 +174,14 @@ async function readStatusFile(
 
 async function printStatus(engine?: Engine): Promise<void> {
   const values = await environmentValues();
+  let httpsPort = 443;
+  try {
+    httpsPort = publishedTraefikHttpsPort(
+      await readFile(composeFile, "utf8"),
+    );
+  } catch {
+    // The conventional HTTPS port is still the useful pre-publication default.
+  }
   const domain =
     values.TRAEFIK_DOMAIN ??
     process.env.Parameters__traefik_domain ??
@@ -198,7 +211,7 @@ async function printStatus(engine?: Engine): Promise<void> {
       const service = label.toLowerCase().split(" ")[0];
       return {
         service: label,
-        url: `https://${service}.${domain}`,
+        url: httpsServiceUrl(service, domain, httpsPort),
         authentication: ingressAuthentication
           ? "Arrspire ingress credentials"
           : "Service credentials",

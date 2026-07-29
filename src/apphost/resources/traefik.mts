@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { images } from "../images.mjs";
 
 import type { EndpointReferencePromise } from "../../.aspire/modules/aspire.mjs";
+import { resolveIngressPorts } from "../ingress.mjs";
 import {
   type ArrspireResource,
   type ResourceContext,
@@ -17,6 +18,7 @@ export type TraefikResource = ArrspireResource<"traefik"> &
 export function addTraefik(
   context: ResourceContext,
 ): TraefikResource {
+  const ingressPorts = resolveIngressPorts(context.paths.rootlessPodman);
   const resource = context.builder
     .addContainer("traefik", images.traefik)
     .withArgs([
@@ -49,14 +51,14 @@ export function addTraefik(
     .withEndpoint({
       name: "http",
       scheme: "http",
-      port: 80,
+      port: ingressPorts.http,
       targetPort: 80,
       isExternal: true,
     })
     .withEndpoint({
       name: "https",
       scheme: "https",
-      port: 443,
+      port: ingressPorts.https,
       targetPort: 443,
       isExternal: true,
     })

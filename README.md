@@ -75,7 +75,10 @@ partially supplied username/password pair is treated as a configuration error.
 ## Access and readiness
 
 Traefik is the only application resource that publishes host ports by default.
-It redirects HTTP to HTTPS and requires the generated Arrspire ingress
+It uses ports 80/443 on rootful Docker or Podman and automatically uses
+unprivileged ports 8080/8443 with rootless Podman. Override the host ports with
+`ARRSPIRE_INGRESS_HTTP_PORT` and `ARRSPIRE_INGRESS_HTTPS_PORT` when needed.
+Traefik redirects HTTP to HTTPS and requires the generated Arrspire ingress
 credentials for administrative UIs. Jellyfin and Jellyseerr retain their own
 service authentication. The insecure Traefik dashboard and direct service
 ports are disabled.

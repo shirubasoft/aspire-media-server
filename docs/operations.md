@@ -3,7 +3,11 @@
 ## Access boundary and first-run handoff
 
 Traefik is the only Arrspire application service published on host ports by
-default (`80` and `443`). HTTP redirects to HTTPS. Administrative routes use a
+default (`80` and `443`, or `8080` and `8443` when rootless Podman is
+detected). Set `ARRSPIRE_INGRESS_HTTP_PORT` and
+`ARRSPIRE_INGRESS_HTTPS_PORT` to override the host ports. The access handoff
+includes a nonstandard HTTPS port automatically. HTTP redirects to HTTPS.
+Administrative routes use a
 Traefik BasicAuth middleware backed by the generated
 `Parameters:ingress-admin-user` and `Parameters:ingress-admin-password`
 values. Jellyfin and Jellyseerr use their own application login so media

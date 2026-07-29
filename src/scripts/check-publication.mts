@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
+import { resolveIngressPorts } from "../apphost/ingress.mjs";
+import { resolveArrspirePaths } from "../apphost/paths.mjs";
+
 const composePath = resolve(
   process.env.ARRSPIRE_OUTPUT_PATH ?? "aspire-output",
   "docker-compose.yaml",
@@ -41,10 +44,13 @@ assert.deepEqual(
   ["traefik"],
   "Only Traefik may publish host ports by default",
 );
+const ingressPorts = resolveIngressPorts(
+  resolveArrspirePaths(process.cwd()).rootlessPodman,
+);
 assert.deepEqual(
   publishedPorts.get("traefik"),
-  ["80:80", "443:443"],
-  "Traefik must be the HTTPS ingress on ports 80 and 443",
+  [`${String(ingressPorts.http)}:80`, `${String(ingressPorts.https)}:443`],
+  "Traefik must publish the expected HTTP and HTTPS ingress ports",
 );
 assert.match(compose, /--api\.insecure=false/u);
 assert.doesNotMatch(compose, /--api\.insecure=true/u);

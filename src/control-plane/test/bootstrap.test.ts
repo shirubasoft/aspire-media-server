@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  fail2banFilter,
   runtimeDirectoryPlan,
   traefikDynamicConfiguration,
 } from "../src/bootstrap.js";
@@ -66,4 +67,9 @@ void test("lets Duplicati use its own Bearer authentication", () => {
   );
   assert.ok(router?.groups?.configuration);
   assert.doesNotMatch(router.groups.configuration, /admin-auth/u);
+});
+
+void test("does not ban browser clients for ordinary missing routes", () => {
+  assert.match(fail2banFilter, /\(401\|403\|429\)/u);
+  assert.doesNotMatch(fail2banFilter, /404/u);
 });

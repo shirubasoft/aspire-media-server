@@ -234,8 +234,8 @@ ${serviceLines.join("\n")}
 `;
 }
 
-const fail2banFilter = `[Definition]
-failregex = ^<HOST> .* "(GET|POST|HEAD).*" (401|403|404|429) .*
+export const fail2banFilter = `[Definition]
+failregex = ^<HOST> .* "(GET|POST|HEAD).*" (401|403|429) .*
 ignoreregex =
 `;
 

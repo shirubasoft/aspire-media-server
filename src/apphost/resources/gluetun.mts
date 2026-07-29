@@ -12,6 +12,20 @@ import type {
 import { directHostAccessEnabled } from "./resource.mjs";
 import { images } from "../images.mjs";
 
+const qbittorrentPortForwardingUpCommand =
+  "/bin/sh -c 'wget -O- -nv --tries=60 --waitretry=1 " +
+  "--retry-connrefused " +
+  '--post-data "json={\\"listen_port\\":{{PORT}},' +
+  '\\"current_network_interface\\":\\"{{VPN_INTERFACE}}\\",' +
+  '\\"random_port\\":false,\\"upnp\\":false}" ' +
+  "http://127.0.0.1:8080/api/v2/app/setPreferences'";
+const qbittorrentPortForwardingDownCommand =
+  "/bin/sh -c 'wget -O- -nv --tries=60 --waitretry=1 " +
+  "--retry-connrefused " +
+  '--post-data "json={\\"listen_port\\":0,' +
+  '\\"current_network_interface\\":\\"lo\\"}" ' +
+  "http://127.0.0.1:8080/api/v2/app/setPreferences'";
+
 export type GluetunResource = ArrspireResource<"gluetun"> &
   Readonly<{
     control: EndpointReferencePromise;
@@ -41,6 +55,16 @@ export async function addGluetun(
       context.parameters.vpnWireguardKey,
     )
     .withEnvironment("SERVER_COUNTRIES", context.parameters.vpnCountries)
+    .withEnvironment("VPN_PORT_FORWARDING", "on")
+    .withEnvironment("VPN_PORT_FORWARDING_PROVIDER", "protonvpn")
+    .withEnvironment(
+      "VPN_PORT_FORWARDING_UP_COMMAND",
+      qbittorrentPortForwardingUpCommand,
+    )
+    .withEnvironment(
+      "VPN_PORT_FORWARDING_DOWN_COMMAND",
+      qbittorrentPortForwardingDownCommand,
+    )
     .withEnvironment("TZ", context.parameters.timezone)
     .withEnvironment("HTTPPROXY", "on")
     .withEnvironment("HTTPPROXY_STEALTH", "on")

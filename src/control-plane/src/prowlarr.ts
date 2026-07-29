@@ -145,6 +145,7 @@ export class ProwlarrClient {
   > {
     const desired: Readonly<Record<string, number>> = {
       EZTV: 25,
+      Knaben: 20,
       LimeTorrents: 50,
       YTS: 25,
     };

@@ -189,9 +189,10 @@ async function verifyArr(
 async function verifyProwlarr(apiKey: string): Promise<void> {
   const baseUrl = endpoint("prowlarr");
   const headers = apiHeaders(apiKey);
-  const [host, applications] = await Promise.all([
+  const [host, applications, indexers] = await Promise.all([
     json<JsonObject>(`${baseUrl}/api/v1/config/host`, { headers }),
     json<ArrEntity[]>(`${baseUrl}/api/v1/applications`, { headers }),
+    json<JsonObject[]>(`${baseUrl}/api/v1/indexer`, { headers }),
   ]);
   ensure(host.proxyEnabled === true, "Prowlarr VPN proxy is disabled");
   for (const application of ["Sonarr", "Radarr", "Lidarr"]) {
@@ -202,6 +203,12 @@ async function verifyProwlarr(apiKey: string): Promise<void> {
       `Prowlarr ${application} application is missing`,
     );
   }
+  ensure(
+    indexers.some(
+      (indexer) => indexer.name === "Knaben" && indexer.enable === true,
+    ),
+    "Prowlarr Knaben music indexer is missing or disabled",
+  );
 }
 
 async function verifyBazarr(apiKey: string): Promise<void> {

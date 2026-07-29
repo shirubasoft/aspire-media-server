@@ -44,9 +44,9 @@ prints it again without revealing secret values. Representative output:
 
 ```text
 Arrspire access (HTTPS)
-Jellyfin          https://jellyfin.localhost       Service credentials
-Sonarr            https://sonarr.localhost         Arrspire ingress credentials
-Traefik dashboard https://traefik.localhost        Arrspire ingress credentials
+Jellyfin          https://jellyfin.192.168.0.15.nip.io:8443       Service credentials
+Sonarr            https://sonarr.192.168.0.15.nip.io:8443         Arrspire ingress credentials
+Traefik dashboard https://traefik.192.168.0.15.nip.io:8443        Arrspire ingress credentials
 
 Readiness
 bootstrap         ready
@@ -55,6 +55,14 @@ reconciliation    degraded
 Integrations requiring attention
 subtitle-provider:OpenSubtitles.com skipped  credentials were not supplied
 ```
+
+The checked-in default targets the current server at
+`192.168.0.15.nip.io`. Override it with
+`Parameters__traefik_domain=<address>.nip.io` if the server's LAN address
+changes. Phones and other clients must be on a network that can reach the
+server, and must trust only
+`data/traefik/dynamic/certs/arrspire-local-ca.crt`; never distribute the CA
+private key.
 
 `ready` means all configured integrations converged. `degraded` means the core
 stack is usable but an optional integration was skipped or failed. `failed`

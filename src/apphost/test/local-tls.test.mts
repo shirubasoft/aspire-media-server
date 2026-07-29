@@ -6,6 +6,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 
+import { defaultTraefikDomain } from "../ingress.mjs";
 import { generateLocalTls } from "../local-tls.mjs";
 
 const execute = promisify(execFile);
@@ -15,7 +16,7 @@ void test(
   async () => {
     const root = await mkdtemp(join(tmpdir(), "arrspire-local-tls-"));
     try {
-      const assets = await generateLocalTls(root, "localhost");
+      const assets = await generateLocalTls(root, defaultTraefikDomain);
       await execute("openssl", [
         "verify",
         "-CAfile",
@@ -28,7 +29,7 @@ void test(
         assets.certificate,
         "-noout",
         "-checkhost",
-        "jellyfin.localhost",
+        `jellyfin.${defaultTraefikDomain}`,
       ]);
       assert.match(stdout, /does match certificate/u);
       assert.match(

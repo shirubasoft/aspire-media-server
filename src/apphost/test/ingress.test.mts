@@ -2,10 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  defaultTraefikDomain,
   httpsServiceUrl,
   publishedTraefikHttpsPort,
   resolveIngressPorts,
 } from "../ingress.mjs";
+
+void test("uses the server LAN nip.io domain by default", () => {
+  assert.equal(defaultTraefikDomain, "192.168.0.15.nip.io");
+});
 
 void test("rootless Podman defaults to unprivileged ingress ports", () => {
   assert.deepEqual(resolveIngressPorts(true, {}), {

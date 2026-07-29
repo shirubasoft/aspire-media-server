@@ -4,13 +4,14 @@ import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
 
+import { defaultTraefikDomain } from "../apphost/ingress.mjs";
 import { generateLocalTls } from "../apphost/local-tls.mjs";
 
 const execute = promisify(execFile);
 const domain =
   process.argv[2] ??
   process.env.Parameters__traefik_domain ??
-  "localhost";
+  defaultTraefikDomain;
 const dataPath = resolve(process.env.ARRSPIRE_DATA_PATH ?? "../data");
 const assets = await generateLocalTls(dataPath, domain);
 const nssDatabase = resolve(homedir(), ".pki", "nssdb");

@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 
 import { selectComposeProjectName } from "../apphost/compose-project.mjs";
 import {
+  defaultTraefikDomain,
   httpsServiceUrl,
   publishedTraefikHttpsPort,
 } from "../apphost/ingress.mjs";
@@ -234,7 +235,7 @@ async function printStatus(engine?: Engine): Promise<void> {
   const domain =
     values.TRAEFIK_DOMAIN ??
     process.env.Parameters__traefik_domain ??
-    "localhost";
+    defaultTraefikDomain;
   const dataPath =
     values.BOOTSTRAP_BINDMOUNT_0 ??
     process.env.ARRSPIRE_DATA_PATH ??

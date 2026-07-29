@@ -303,7 +303,7 @@ export async function bootstrap(): Promise<void> {
   }
 
   const services = routedServices();
-  const domain = optional("TRAEFIK_DOMAIN", "localhost");
+  const domain = optional("TRAEFIK_DOMAIN", "192.168.0.15.nip.io");
   const ingressUser = required("INGRESS_ADMIN_USER");
   const ingressPassword = required("INGRESS_ADMIN_PASSWORD");
   await Promise.all([

@@ -3,6 +3,8 @@ export interface IngressPorts {
   readonly https: number;
 }
 
+export const defaultTraefikDomain = "192.168.0.15.nip.io";
+
 function port(
   name: string,
   value: string | undefined,

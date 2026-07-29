@@ -11,7 +11,6 @@ import {
   addGluetun,
   addGrafana,
   addJellyfin,
-  addJellyseerr,
   addLidarr,
   addPrometheus,
   addProwlarr,
@@ -19,6 +18,7 @@ import {
   addRadarr,
   addReconciler,
   addRecyclarr,
+  addSeerr,
   addSonarr,
   addTdarr,
   addTraefik,
@@ -31,7 +31,6 @@ import {
   type GluetunResource,
   type GrafanaResource,
   type JellyfinResource,
-  type JellyseerrResource,
   type LidarrResource,
   type PrometheusResource,
   type ProwlarrResource,
@@ -40,9 +39,11 @@ import {
   type ReconcilerResource,
   type RecyclarrResource,
   type ResourceContext,
+  type SeerrResource,
   type SonarrResource,
   type TdarrResource,
   type TraefikResource,
+  withComposeInit,
   withComposeRestart,
 } from "./resources/index.mjs";
 
@@ -55,7 +56,7 @@ export type ArrspireTopology = Readonly<{
   prowlarr: ProwlarrResource;
   bazarr: BazarrResource;
   jellyfin: JellyfinResource;
-  jellyseerr: JellyseerrResource;
+  seerr: SeerrResource;
   recyclarr: RecyclarrResource;
   duplicati: DuplicatiResource;
   tdarr: TdarrResource;
@@ -91,7 +92,7 @@ export async function addArrspireTopology(
   const lidarr = addLidarr(context);
   const bazarr = addBazarr(context);
   const jellyfin = addJellyfin(context);
-  const jellyseerr = addJellyseerr(context);
+  const seerr = addSeerr(context);
   const recyclarr = addRecyclarr(context);
   const duplicati = addDuplicati(context);
   const tdarr = addTdarr(context);
@@ -108,7 +109,7 @@ export async function addArrspireTopology(
     prowlarr: prowlarr.http,
     bazarr: bazarr.http,
     jellyfin: jellyfin.http,
-    jellyseerr: jellyseerr.http,
+    seerr: seerr.http,
     qbittorrent: qbittorrent.http,
     tdarr: tdarr.webUi,
     duplicati: duplicati.http,
@@ -129,7 +130,7 @@ export async function addArrspireTopology(
     prowlarr.resource,
     bazarr.resource,
     jellyfin.resource,
-    jellyseerr.resource,
+    seerr.resource,
     recyclarr.resource,
     duplicati.resource,
     tdarr.resource,
@@ -155,7 +156,7 @@ export async function addArrspireTopology(
     prowlarr.resource,
     bazarr.resource,
     jellyfin.resource,
-    jellyseerr.resource,
+    seerr.resource,
     tdarr.resource,
   ];
   const reconciliationEndpoints = {
@@ -194,7 +195,7 @@ export async function addArrspireTopology(
       prowlarr.composeResource,
       bazarr.resource,
       jellyfin.resource,
-      jellyseerr.resource,
+      seerr.resource,
       recyclarr.resource,
       duplicati.resource,
       tdarr.resource,
@@ -203,6 +204,7 @@ export async function addArrspireTopology(
       prometheus.resource,
       grafana.resource,
     ].map((resource) => withComposeRestart(resource)),
+    withComposeInit(seerr.resource),
     withComposeRestart(reconciler.resource, "on-failure:5"),
   ]);
 
@@ -215,7 +217,7 @@ export async function addArrspireTopology(
     prowlarr,
     bazarr,
     jellyfin,
-    jellyseerr,
+    seerr,
     recyclarr,
     duplicati,
     tdarr,

@@ -27,6 +27,7 @@ const dataDirectories = [
   "grafana-provisioning/datasources",
   "jellyfin",
   "jellyfin-cache",
+  // Preserve the legacy data directory for Seerr's automatic migration.
   "jellyseerr",
   "lidarr",
   "prometheus",
@@ -60,6 +61,9 @@ export function runtimeDirectoryPlan(): readonly RuntimeDirectory[] {
     // Recyclarr runs as UID/GID 1000 and needs to create its migration state
     // under /config when the scheduled job starts.
     { path: "/data/recyclarr", uid: 1000, gid: 1000 },
+    // Seerr's official rootless image runs as UID/GID 1000. The legacy
+    // Jellyseerr directory is intentionally retained for in-place migration.
+    { path: "/data/jellyseerr", uid: 1000, gid: 1000 },
     { path: "/media/movies", uid: 1000, gid: 1000 },
     { path: "/media/tv", uid: 1000, gid: 1000 },
     { path: "/media/music", uid: 1000, gid: 1000 },
@@ -137,6 +141,7 @@ function arrConfig({ name, port }: ArrBootstrap): string {
 interface RoutedService {
   readonly url: string;
   readonly requiresIngressAuthentication: boolean;
+  readonly aliases?: readonly string[];
 }
 
 function routedServices(): Readonly<Record<string, RoutedService>> {
@@ -167,9 +172,10 @@ function routedServices(): Readonly<Record<string, RoutedService>> {
       url: required("JELLYFIN_URL"),
       requiresIngressAuthentication: false,
     },
-    jellyseerr: {
-      url: required("JELLYSEERR_URL"),
+    seerr: {
+      url: required("SEERR_URL"),
       requiresIngressAuthentication: false,
+      aliases: ["jellyseerr"],
     },
     lidarr: {
       url: required("LIDARR_URL"),
@@ -213,8 +219,11 @@ export function traefikDynamicConfiguration(
   const serviceLines: string[] = [];
   const tlsConfiguration = traefikRouterTlsConfiguration(tlsMode);
   for (const [name, service] of Object.entries(services)) {
+    const hostRules = [name, ...(service.aliases ?? [])]
+      .map((hostname) => `Host(\`${hostname}.${domain}\`)`)
+      .join(" || ");
     routerLines.push(`    ${name}:
-      rule: 'Host(\`${name}.${domain}\`)'
+      rule: '${hostRules}'
       entryPoints: [websecure]
       service: ${name}
 ${tlsConfiguration}

@@ -284,7 +284,7 @@ async function printStatus(engine?: Engine): Promise<void> {
     resolve("..", "data");
   const accessRows = [
     ["Jellyfin", false],
-    ["Jellyseerr", false],
+    ["Seerr", false],
     ["Sonarr", true],
     ["Radarr", true],
     ["Lidarr", true],
@@ -319,7 +319,7 @@ async function printStatus(engine?: Engine): Promise<void> {
       password: "Parameters:ingress-admin-password",
     },
     {
-      surface: "Jellyfin / Jellyseerr",
+      surface: "Jellyfin / Seerr",
       username: "Parameters:jellyfin-admin-user",
       password: "Parameters:jellyfin-admin-password",
     },

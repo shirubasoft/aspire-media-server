@@ -12,6 +12,7 @@ void test("runtime media and download directories belong to the service user", (
     { path: "/data/grafana", uid: 472, gid: 0 },
     { path: "/data/prometheus", uid: 65_534, gid: 65_534 },
     { path: "/data/recyclarr", uid: 1000, gid: 1000 },
+    { path: "/data/jellyseerr", uid: 1000, gid: 1000 },
     { path: "/media/movies", uid: 1000, gid: 1000 },
     { path: "/media/tv", uid: 1000, gid: 1000 },
     { path: "/media/music", uid: 1000, gid: 1000 },
@@ -95,6 +96,27 @@ void test("lets Duplicati use its own Bearer authentication", () => {
   );
   assert.ok(router?.groups?.configuration);
   assert.doesNotMatch(router.groups.configuration, /admin-auth/u);
+});
+
+void test("keeps the legacy Jellyseerr hostname as a Seerr alias", () => {
+  const configuration = traefikDynamicConfiguration(
+    "localhost",
+    {
+      seerr: {
+        url: "http://seerr:5055",
+        requiresIngressAuthentication: false,
+        aliases: ["jellyseerr"],
+      },
+    },
+    "operator",
+    "secret",
+  );
+
+  assert.match(
+    configuration,
+    /rule: 'Host\(`seerr\.localhost`\) \|\| Host\(`jellyseerr\.localhost`\)'/u,
+  );
+  assert.match(configuration, /url: "http:\/\/seerr:5055"/u);
 });
 
 void test("does not ban browser clients for ordinary missing routes", () => {

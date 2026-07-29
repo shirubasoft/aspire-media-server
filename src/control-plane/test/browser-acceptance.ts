@@ -244,7 +244,7 @@ async function verifyDuplicati(
   await page.close();
 }
 
-async function verifyJellyseerr(
+async function verifySeerr(
   context: BrowserContext,
   options: BrowserAcceptanceOptions,
 ): Promise<void> {
@@ -252,7 +252,7 @@ async function verifyJellyseerr(
   const baseUrl = serviceUrl(
     options.ingressUrl,
     options.domain,
-    "jellyseerr",
+    "seerr",
   );
   await gotoAvailable(page, baseUrl);
   await page.locator("#username").fill(options.jellyfinUsername);
@@ -350,7 +350,7 @@ export async function verifyBrowserAcceptance(
       ignoreHTTPSErrors: true,
     });
     await verifyJellyfin(serviceContext, options);
-    await verifyJellyseerr(serviceContext, options);
+    await verifySeerr(serviceContext, options);
     await verifyDuplicati(serviceContext, options);
     await serviceContext.close();
   } finally {

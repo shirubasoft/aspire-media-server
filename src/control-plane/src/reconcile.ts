@@ -1,7 +1,7 @@
 import {
   readArrApiKey,
   readBazarrApiKey,
-  readJellyseerrApiKey,
+  readSeerrApiKey,
 } from "./api-key.js";
 import { ArrClient } from "./arr.js";
 import { BazarrClient } from "./bazarr.js";
@@ -14,11 +14,11 @@ import {
 import { DuplicatiClient } from "./duplicati.js";
 import { waitForHttp } from "./http.js";
 import { JellyfinClient } from "./jellyfin.js";
-import { JellyseerrClient } from "./jellyseerr.js";
 import { log } from "./log.js";
 import { ProwlarrClient } from "./prowlarr.js";
 import { QBittorrentClient } from "./qbittorrent.js";
 import { reconcileRecyclarr } from "./recyclarr.js";
+import { SeerrClient } from "./seerr.js";
 import {
   type ReconciliationResult,
   writeReconciliationStatus,
@@ -34,7 +34,7 @@ interface ServiceUrls {
   readonly prowlarr: string;
   readonly bazarr: string;
   readonly jellyfin: string;
-  readonly jellyseerr: string;
+  readonly seerr: string;
   readonly qbittorrent: string;
   readonly tdarr: string;
   readonly duplicati: string;
@@ -97,7 +97,7 @@ function loadServiceUrls(): ServiceUrls {
     prowlarr: required("PROWLARR_URL"),
     bazarr: required("BAZARR_URL"),
     jellyfin: required("JELLYFIN_URL"),
-    jellyseerr: required("JELLYSEERR_URL"),
+    seerr: required("SEERR_URL"),
     qbittorrent: required("QBITTORRENT_URL"),
     tdarr: required("TDARR_URL"),
     duplicati: required("DUPLICATI_URL"),
@@ -113,7 +113,7 @@ async function waitForServices(urls: ServiceUrls): Promise<void> {
     waitForHttp("Prowlarr", `${urls.prowlarr}/ping`),
     waitForHttp("Bazarr", `${urls.bazarr}/`),
     waitForHttp("Jellyfin", `${urls.jellyfin}/health`),
-    waitForHttp("Jellyseerr", `${urls.jellyseerr}/api/v1/status`),
+    waitForHttp("Seerr", `${urls.seerr}/api/v1/status`),
     waitForHttp("Tdarr", `${urls.tdarr}/api/v2/status`),
     waitForHttp("Duplicati", `${urls.duplicati}/ngclient/`),
   ]);
@@ -140,7 +140,7 @@ async function reconcileCore(results: ReconciliationResult[]): Promise<void> {
     lidarrKey,
     prowlarrKey,
     bazarrKey,
-    jellyseerrKey,
+    seerrKey,
   ] =
     await Promise.all([
       readArrApiKey("sonarr"),
@@ -148,7 +148,7 @@ async function reconcileCore(results: ReconciliationResult[]): Promise<void> {
       readArrApiKey("lidarr"),
       readArrApiKey("prowlarr"),
       readBazarrApiKey(),
-      readJellyseerrApiKey(),
+      readSeerrApiKey(),
     ]);
 
   const qbittorrent = new QBittorrentClient(
@@ -174,8 +174,8 @@ async function reconcileCore(results: ReconciliationResult[]): Promise<void> {
         jellyfin.reconcile({
           bazarrUrl: urls.bazarr,
           bazarrApiKey: bazarrKey,
-          jellyseerrUrl: urls.jellyseerr,
-          jellyseerrApiKey: jellyseerrKey,
+          seerrUrl: urls.seerr,
+          seerrApiKey: seerrKey,
           sonarrUrl: urls.sonarr,
           sonarrApiKey: sonarrKey,
           radarrUrl: urls.radarr,
@@ -235,12 +235,12 @@ async function reconcileCore(results: ReconciliationResult[]): Promise<void> {
 
   const prowlarr = new ProwlarrClient(urls.prowlarr, prowlarrKey);
   const bazarr = new BazarrClient(urls.bazarr, bazarrKey);
-  const jellyseerr = new JellyseerrClient(
-    urls.jellyseerr,
+  const seerr = new SeerrClient(
+    urls.seerr,
     urls.jellyfin,
     jellyfinUser,
     jellyfinPassword,
-    jellyseerrKey,
+    seerrKey,
   );
   const tdarr = new TdarrClient(urls.tdarr);
   const duplicati = new DuplicatiClient(
@@ -305,9 +305,9 @@ async function reconcileCore(results: ReconciliationResult[]): Promise<void> {
         ),
     },
     {
-      name: "jellyseerr",
+      name: "seerr",
       operation: () =>
-        jellyseerr.reconcile(
+        seerr.reconcile(
           urls.sonarr,
           sonarrKey,
           urls.radarr,

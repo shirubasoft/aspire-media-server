@@ -22,6 +22,7 @@ import {
   type ReconciliationResult,
   writeReconciliationStatus,
 } from "./status.js";
+import { TdarrClient } from "./tdarr.js";
 import { optionalCredentialStates } from "./validation.js";
 
 interface ServiceUrls {
@@ -34,6 +35,7 @@ interface ServiceUrls {
   readonly jellyfin: string;
   readonly jellyseerr: string;
   readonly qbittorrent: string;
+  readonly tdarr: string;
 }
 
 async function integration(
@@ -95,6 +97,7 @@ function loadServiceUrls(): ServiceUrls {
     jellyfin: required("JELLYFIN_URL"),
     jellyseerr: required("JELLYSEERR_URL"),
     qbittorrent: required("QBITTORRENT_URL"),
+    tdarr: required("TDARR_URL"),
   };
 }
 
@@ -108,6 +111,7 @@ async function waitForServices(urls: ServiceUrls): Promise<void> {
     waitForHttp("Bazarr", `${urls.bazarr}/`),
     waitForHttp("Jellyfin", `${urls.jellyfin}/health`),
     waitForHttp("Jellyseerr", `${urls.jellyseerr}/api/v1/status`),
+    waitForHttp("Tdarr", `${urls.tdarr}/api/v2/status`),
   ]);
 }
 
@@ -234,6 +238,7 @@ async function reconcileCore(results: ReconciliationResult[]): Promise<void> {
     jellyfinPassword,
     jellyseerrKey,
   );
+  const tdarr = new TdarrClient(urls.tdarr);
   let prowlarrOptionalResults: readonly ReconciliationResult[] = [];
   await runRequiredStage(results, [
     {
@@ -309,6 +314,10 @@ async function reconcileCore(results: ReconciliationResult[]): Promise<void> {
           urls.radarr,
           radarrKey,
         ),
+    },
+    {
+      name: "tdarr",
+      operation: () => tdarr.reconcile(),
     },
   ]);
   results.push(...prowlarrOptionalResults);

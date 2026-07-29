@@ -175,6 +175,12 @@ container with three commands:
 - `reconcile` waits for real APIs and converges cross-service settings.
 - `verify` is the real-stack acceptance suite used by E2E tests.
 
+CI starts an isolated stack twice and complements the API acceptance checks
+with headless Playwright coverage. The browser suite crosses Traefik, opens
+every web UI, exercises Jellyfin, Jellyseerr, qBittorrent, Duplicati, and
+Grafana login flows, navigates the Jellyfin libraries, and verifies the
+Jellyseerr and Grafana service-integration screens.
+
 Public tracker registration is best-effort because third-party availability and
 bot protection are outside the stack's control. Core service configuration is
 strict and fails visibly if it cannot converge.

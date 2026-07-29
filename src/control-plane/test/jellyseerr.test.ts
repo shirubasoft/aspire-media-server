@@ -35,7 +35,11 @@ void test("repairs initialized Jellyseerr service endpoints", async (context) =>
       } else if (path === "/api/v1/settings/radarr") {
         response.end('[{"id":22,"name":"Radarr","hostname":null}]');
       } else if (path.endsWith("/api/v3/qualityprofile")) {
-        response.end('[{"id":1,"name":"HD-1080p"}]');
+        response.end(
+          path.startsWith("/sonarr")
+            ? '[{"id":1,"name":"HD-1080p"},{"id":7,"name":"[Anime] Remux-1080p"}]'
+            : '[{"id":1,"name":"HD-1080p"}]',
+        );
       } else if (path.endsWith("/api/v3/rootfolder")) {
         response.end(
           path.startsWith("/sonarr")
@@ -87,7 +91,11 @@ void test("repairs initialized Jellyseerr service endpoints", async (context) =>
       (request) =>
         request.method === "PUT" &&
         request.path === "/api/v1/settings/sonarr/11" &&
-        request.body.hostname === "127.0.0.1",
+        request.body.hostname === "127.0.0.1" &&
+        request.body.animeSeriesType === "anime" &&
+        request.body.activeAnimeProfileId === 7 &&
+        request.body.activeAnimeProfileName === "[Anime] Remux-1080p" &&
+        request.body.activeAnimeDirectory === "/tv",
     ),
   );
   assert.ok(

@@ -77,6 +77,9 @@ void test("disables the redundant HTTP proxy for a VPN-networked qBittorrent", a
   assert.equal(changedPreferences?.proxy_bittorrent, false);
   assert.equal(changedPreferences?.proxy_misc, false);
   assert.equal(changedPreferences?.proxy_rss, false);
+  assert.equal(changedPreferences?.current_network_interface, "tun0");
+  assert.equal(changedPreferences?.upnp, false);
+  assert.equal(changedPreferences?.bypass_local_auth, true);
   assert.deepEqual(changedCategories, {
     sonarr: "/downloads/sonarr",
     radarr: "/downloads/radarr",

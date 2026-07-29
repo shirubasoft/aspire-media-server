@@ -18,12 +18,19 @@ await builder
     await dashboard.withImageSHA256(
       aspireDashboardDigest.slice("sha256:".length),
     );
+    await dashboard.withForwardedHeaders();
     await dashboard.publishAsDockerComposeService(
       async (_dashboard, service) => {
         // The dashboard contains logs, traces, environment metadata, and
         // commands. Keep it on the Compose network instead of host-publishing
-        // it; local run mode still exposes its authenticated developer URL.
+        // it. Traefik supplies the deployment authentication boundary, so the
+        // dashboard itself must not redirect browsers to an internal token
+        // login URL.
         await service.ports.clear();
+        await service.environment.set(
+          "DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS",
+          "true",
+        );
       },
     );
   });

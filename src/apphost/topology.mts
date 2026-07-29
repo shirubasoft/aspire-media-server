@@ -163,12 +163,15 @@ export async function addArrspireTopology(
     ingress: traefik.https,
     ...applicationEndpoints,
   };
+  await recyclarr.sync.waitFor(sonarr.resource);
+  await recyclarr.sync.waitFor(radarr.resource);
   const reconciler = addReconciler(
     context,
     reconciliationEndpoints,
     reconciledResources,
   );
 
+  await reconciler.resource.waitFor(recyclarr.sync);
   await recyclarr.resource.waitForCompletion(reconciler.resource);
 
   const acceptance =

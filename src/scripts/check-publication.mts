@@ -56,6 +56,16 @@ assert.match(compose, /--api\.insecure=false/u);
 assert.doesNotMatch(compose, /--api\.insecure=true/u);
 assert.match(
   compose,
+  /arrspire-dashboard:[\s\S]*?ASPIRE_DASHBOARD_FORWARDEDHEADERS_ENABLED: "true"/u,
+  "Aspire dashboard must honor the public Traefik host and scheme",
+);
+assert.match(
+  compose,
+  /arrspire-dashboard:[\s\S]*?DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: "true"/u,
+  "Traefik authentication must replace the dashboard's internal token login",
+);
+assert.match(
+  compose,
   /duplicati:[\s\S]*?DUPLICATI__WEBSERVICE_ALLOWED_HOSTNAMES: "\*"/u,
   "Duplicati must accept its authenticated ingress hostname",
 );

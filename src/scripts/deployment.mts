@@ -253,6 +253,7 @@ async function printStatus(engine?: Engine): Promise<void> {
     ["Tdarr", true],
     ["Prometheus", true],
     ["Grafana", true],
+    ["Aspire dashboard", true],
     ["Traefik dashboard", true],
   ] as const;
   console.log("\nArrspire access (HTTPS)");

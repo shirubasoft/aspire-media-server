@@ -65,6 +65,8 @@ export class QBittorrentClient {
       pex: true,
       lsd: false,
       encryption: 1,
+      current_network_interface: "tun0",
+      upnp: false,
       max_active_downloads: 5,
       max_active_uploads: 10,
       max_active_torrents: 15,
@@ -91,6 +93,9 @@ export class QBittorrentClient {
       proxy_bittorrent: false,
       proxy_misc: false,
       proxy_rss: false,
+      // Gluetun's port-forwarding hook calls the qBittorrent API over the
+      // shared loopback interface whenever Proton rotates the forwarded port.
+      bypass_local_auth: true,
     };
 
     const changes = Object.fromEntries(

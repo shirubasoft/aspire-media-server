@@ -39,6 +39,10 @@ void test("uses Recyclarr v8 guide-backed profiles instead of removed includes",
   );
   assert.match(
     configuration,
+    /trash_id: 20e0fc959f1f1704bed501f23bdae76f # \[Anime\] Remux-1080p/u,
+  );
+  assert.match(
+    configuration,
     /trash_id: d1d67249d3890e49bc12e275d989a7e9 # HD Bluray \+ WEB/u,
   );
   assert.match(configuration, /quality_definition:\n      type: series/u);

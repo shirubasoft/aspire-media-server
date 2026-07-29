@@ -27,6 +27,20 @@ interface JellyfinPlugin {
   readonly Name?: string;
 }
 
+interface QualityItem {
+  readonly allowed?: boolean;
+  readonly quality?: {
+    readonly name?: string;
+  };
+  readonly items?: readonly QualityItem[];
+}
+
+interface QualityProfile extends JsonObject {
+  readonly name?: string;
+  readonly upgradeAllowed?: boolean;
+  readonly items?: readonly QualityItem[];
+}
+
 function ensure(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new Error(`Acceptance check failed: ${message}`);
@@ -172,11 +186,14 @@ async function verifyArr(
 ): Promise<void> {
   const baseUrl = endpoint(name);
   const headers = apiHeaders(apiKey);
-  const [clients, roots] = await Promise.all([
+  const [clients, roots, profiles] = await Promise.all([
     json<ArrEntity[]>(`${baseUrl}/api/${apiVersion}/downloadclient`, {
       headers,
     }),
     json<JsonObject[]>(`${baseUrl}/api/${apiVersion}/rootfolder`, { headers }),
+    json<QualityProfile[]>(`${baseUrl}/api/${apiVersion}/qualityprofile`, {
+      headers,
+    }),
   ]);
   const qbit = clients.find(
     (client) => client.implementation === "QBittorrent",
@@ -194,6 +211,30 @@ async function verifyArr(
     roots.some((root) => root.path === rootFolder),
     `${name} root folder ${rootFolder} is missing`,
   );
+  if (name === "sonarr") {
+    const anime = profiles.find(
+      (profile) => profile.name === "[Anime] Remux-1080p",
+    );
+    ensure(anime, "Sonarr anime Blu-ray quality profile is missing");
+    ensure(
+      anime.upgradeAllowed === true,
+      "Sonarr anime profile does not permit quality upgrades",
+    );
+    const qualityNames = (anime.items ?? []).flatMap(function names(
+      item,
+    ): string[] {
+      return [
+        ...(item.allowed === true && item.quality?.name
+          ? [item.quality.name]
+          : []),
+        ...(item.items ?? []).flatMap(names),
+      ];
+    });
+    ensure(
+      qualityNames.some((quality) => quality.startsWith("Bluray-")),
+      "Sonarr anime profile has no enabled Blu-ray quality",
+    );
+  }
 }
 
 async function verifyProwlarr(apiKey: string): Promise<void> {
@@ -213,6 +254,21 @@ async function verifyProwlarr(apiKey: string): Promise<void> {
       `Prowlarr ${application} application is missing`,
     );
   }
+  const sonarr = applications.find(
+    (application) => application.implementation === "Sonarr",
+  );
+  const sonarrFields = Object.fromEntries(
+    (sonarr?.fields ?? [])
+      .filter((field): field is Field & { readonly name: string } =>
+        Boolean(field.name),
+      )
+      .map((field) => [field.name, field.value]),
+  );
+  ensure(
+    Array.isArray(sonarrFields.animeSyncCategories) &&
+      sonarrFields.animeSyncCategories.includes(5070),
+    "Prowlarr does not synchronize the anime category to Sonarr",
+  );
   ensure(
     indexers.some(
       (indexer) => indexer.name === "Knaben" && indexer.enable === true,
@@ -334,7 +390,14 @@ async function verifyJellyseerr(apiKey: string): Promise<void> {
       `${baseUrl}/api/v1/settings/jellyfin`,
       { headers },
     ),
-    json<Array<{ readonly isDefault?: boolean }>>(
+    json<
+      Array<{
+        readonly isDefault?: boolean;
+        readonly animeSeriesType?: string;
+        readonly activeAnimeProfileName?: string;
+        readonly activeAnimeDirectory?: string;
+      }>
+    >(
       `${baseUrl}/api/v1/settings/sonarr`,
       { headers },
     ),
@@ -354,6 +417,16 @@ async function verifyJellyseerr(apiKey: string): Promise<void> {
   ensure(
     sonarr.some((service) => service.isDefault),
     "Jellyseerr has no default Sonarr",
+  );
+  ensure(
+    sonarr.some(
+      (service) =>
+        service.isDefault &&
+        service.animeSeriesType === "anime" &&
+        service.activeAnimeProfileName === "[Anime] Remux-1080p" &&
+        service.activeAnimeDirectory === "/tv",
+    ),
+    "Jellyseerr does not use the anime Blu-ray profile for anime requests",
   );
   ensure(
     radarr.some((service) => service.isDefault),

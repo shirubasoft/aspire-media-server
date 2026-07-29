@@ -8,8 +8,11 @@ import { join, relative, sep } from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 
+import { verifyBrowserAcceptance } from "./browser-acceptance.js";
+
 const execute = promisify(execFile);
 const projectDirectory = process.cwd();
+const testDomain = "192.168.0.15.nip.io";
 type ContainerEngine = "docker" | "podman";
 
 function containerEngine(): ContainerEngine {
@@ -25,6 +28,7 @@ const engine = containerEngine();
 interface RunningAppHost {
   readonly directory: string;
   readonly instanceId: string;
+  readonly dashboardUrl: string;
   readonly output: string;
 }
 
@@ -48,10 +52,17 @@ async function startAppHost(
       timeout: 180_000,
     },
   );
+  const result = JSON.parse(stdout) as {
+    readonly dashboardUrl?: string;
+  };
+  assert.ok(result.dashboardUrl, "Aspire start did not return a dashboard URL");
   return {
     directory: appHostDirectory,
     instanceId: environment.ARRSPIRE_INSTANCE_ID!,
-    output: `${stdout}\n${stderr}`.slice(-80_000),
+    dashboardUrl: result.dashboardUrl,
+    // stdout contains the ephemeral dashboard login token. Keep it out of
+    // failure diagnostics and CI logs.
+    output: stderr.slice(-80_000),
   };
 }
 
@@ -109,6 +120,44 @@ async function acceptanceResult(appHostDirectory: string): Promise<{
     }>;
   };
   return document.resources?.[0] ?? {};
+}
+
+async function resourceEndpoint(
+  appHostDirectory: string,
+  resource: string,
+  endpointName: string,
+): Promise<string> {
+  const { stdout } = await execute(
+    "aspire",
+    [
+      "describe",
+      resource,
+      "--format",
+      "json",
+      "--non-interactive",
+    ],
+    { cwd: appHostDirectory, timeout: 30_000 },
+  );
+  interface Endpoint {
+    readonly name?: string;
+    readonly url?: string;
+  }
+  interface DescribedResource {
+    readonly endpoints?: readonly Endpoint[];
+    readonly urls?: readonly Endpoint[];
+  }
+  const document = JSON.parse(stdout) as DescribedResource & {
+    readonly resources?: readonly DescribedResource[];
+  };
+  const described = document.resources?.[0] ?? document;
+  const endpoint = [...(described.endpoints ?? []), ...(described.urls ?? [])].find(
+    (candidate) => candidate.name === endpointName,
+  );
+  assert.ok(
+    endpoint?.url,
+    `${resource} has no ${endpointName} endpoint in Aspire state`,
+  );
+  return endpoint.url;
 }
 
 async function resourceLogs(
@@ -173,9 +222,26 @@ async function runAcceptance(
       );
       assert.fail(
         `${run} acceptance exited ${String(result.exitCode)} (${String(result.state)}):\n` +
-          `${diagnosticLogs.join("\n\n")}\n\n${appHost.output}`,
+        `${diagnosticLogs.join("\n\n")}\n\n${appHost.output}`,
       );
     }
+    const ingressUrl = await resourceEndpoint(
+      appHostDirectory,
+      "traefik",
+      "https",
+    );
+    await verifyBrowserAcceptance({
+      ingressUrl,
+      dashboardUrl: appHost.dashboardUrl,
+      domain: environment.Parameters__traefik_domain!,
+      ingressUsername: environment.Parameters__ingress_admin_user!,
+      ingressPassword: environment.Parameters__ingress_admin_password!,
+      jellyfinUsername: "admin",
+      jellyfinPassword: environment.Parameters__jellyfin_admin_password!,
+      qbittorrentPassword: environment.Parameters__qbittorrent_password!,
+      duplicatiPassword: environment.Parameters__duplicati_web_password!,
+      grafanaPassword: environment.Parameters__grafana_admin_password!,
+    });
   } finally {
     await stopAppHost(appHost);
   }
@@ -302,13 +368,21 @@ void test(
       ARRSPIRE_MEDIA_PATH: media,
       ARRSPIRE_DOWNLOADS_PATH: downloads,
       ARRSPIRE_INSTANCE_ID: randomBytes(8).toString("hex"),
+      ARRSPIRE_INGRESS_HTTP_PORT: "9080",
+      ARRSPIRE_INGRESS_HTTPS_PORT: "9443",
       NO_COLOR: "1",
       Parameters__vpn_wireguard_key: vpnWireguardKey,
+      // Exercise the checked-in phone-accessible nip.io default. Chromium's
+      // resolver rule keeps this isolated on loopback instead of contacting
+      // the LAN deployment that the hostname normally resolves to.
+      Parameters__traefik_domain: testDomain,
+      Parameters__ingress_admin_user: "admin",
       Parameters__jellyfin_admin_password: generatedSecret(),
       Parameters__qbittorrent_password: generatedSecret(),
       Parameters__duplicati_encryption_key: generatedSecret(32),
       Parameters__duplicati_web_password: generatedSecret(),
-      Parameters__grafana_admin_password: generatedSecret(),
+      Parameters__grafana_admin_password:
+        "ArrspireE2EGrafana123456789",
       Parameters__ingress_admin_password: generatedSecret(),
     };
 

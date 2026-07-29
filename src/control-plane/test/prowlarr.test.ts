@@ -6,15 +6,22 @@ import { ProwlarrClient } from "../src/prowlarr.js";
 
 void test("configures a music-capable public indexer for Lidarr", async (context) => {
   const createdIndexers: string[] = [];
+  const updatedApplications: Record<string, unknown>[] = [];
   const applications = ["Sonarr", "Radarr", "Lidarr"].map(
     (implementation, index) => ({
       id: index + 1,
       name: implementation,
       implementation,
-      fields: [],
+      fields:
+        implementation === "Sonarr"
+          ? [
+              { name: "animeSyncCategories", value: [] },
+              { name: "syncAnimeStandardFormatSearch", value: true },
+            ]
+          : [],
     }),
   );
-  const indexerSchemas = ["EZTV", "Knaben", "LimeTorrents", "YTS"].map(
+  const indexerSchemas = ["Nyaa.si", "EZTV", "Knaben", "LimeTorrents", "YTS"].map(
     (name) => ({ name, fields: [] }),
   );
   const server = createServer((request, response) => {
@@ -52,9 +59,19 @@ void test("configures a music-capable public indexer for Lidarr", async (context
       } else if (path === "/api/v1/indexer/schema") {
         response.end(JSON.stringify(indexerSchemas));
       } else {
+        if (
+          request.method === "PUT" &&
+          path.startsWith("/api/v1/applications/")
+        ) {
+          updatedApplications.push(body);
+        }
         if (request.method === "POST" && path === "/api/v1/indexer") {
           assert.equal(typeof body.name, "string");
           createdIndexers.push(body.name as string);
+          if (body.name === "Nyaa.si") {
+            assert.equal(body.enable, true);
+            assert.equal(body.priority, 5);
+          }
         }
         response.end("{}");
       }
@@ -82,5 +99,25 @@ void test("configures a music-capable public indexer for Lidarr", async (context
   assert.ok(
     createdIndexers.includes("Knaben"),
     "Knaben must be configured so Lidarr receives a working music indexer",
+  );
+  assert.ok(
+    createdIndexers.includes("Nyaa.si"),
+    "Nyaa must be configured so Sonarr can find anime",
+  );
+  const sonarr = updatedApplications.find(
+    (application) => application.implementation === "Sonarr",
+  );
+  const fields = sonarr?.fields as
+    | Array<{ readonly name?: string; readonly value?: unknown }>
+    | undefined;
+  assert.deepEqual(
+    fields?.find((field) => field.name === "animeSyncCategories")?.value,
+    [5070],
+  );
+  assert.equal(
+    fields?.find(
+      (field) => field.name === "syncAnimeStandardFormatSearch",
+    )?.value,
+    false,
   );
 });

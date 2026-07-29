@@ -23,7 +23,10 @@ export function addGrafana(
         context.parameters.grafanaAdminPassword,
       )
       .withEnvironment("GF_USERS_ALLOW_SIGN_UP", "false")
-      .withVolume("/var/lib/grafana", { name: "grafana-data" })
+      .withBindMount(
+        join(context.paths.data, "grafana"),
+        "/var/lib/grafana",
+      )
       .withBindMount(
         join(context.paths.data, "grafana-provisioning"),
         "/etc/grafana/provisioning",

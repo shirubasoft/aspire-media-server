@@ -27,6 +27,11 @@ export function addDuplicati(
 ): DuplicatiResource {
   let resource = context.builder
     .addContainer("duplicati", images.duplicati)
+    // Duplicati 2.3 can hit a one-time SQLite command-disposal race while it
+    // rewrites encrypted settings after a persisted stack is restarted. The
+    // next start succeeds, so let the runtime recover the service without
+    // requiring a manual container restart.
+    .withContainerRuntimeArgs(["--restart=on-failure:3"])
     .withEnvironment("TZ", context.parameters.timezone)
     .withEnvironment(
       "DUPLICATI__SETTINGS_ENCRYPTION_KEY",

@@ -19,7 +19,10 @@ export function addPrometheus(
         "prometheus",
         images.prometheus,
       )
-      .withVolume("/prometheus", { name: "prometheus-data" })
+      .withBindMount(
+        join(context.paths.data, "prometheus"),
+        "/prometheus",
+      )
       .withBindMount(
         join(context.paths.data, "prometheus-config"),
         "/etc/prometheus",

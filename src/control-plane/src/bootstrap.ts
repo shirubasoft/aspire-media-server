@@ -2,9 +2,11 @@ import { createHash, pbkdf2Sync, randomBytes } from "node:crypto";
 import { chown, mkdir } from "node:fs/promises";
 
 import { optional, required } from "./environment.js";
+import { readArrApiKey } from "./api-key.js";
 import { writeIfChanged, writeOnce } from "./files.js";
 import { installJellyfinPlugins } from "./jellyfin-plugins.js";
 import { log } from "./log.js";
+import { reconcileRecyclarr } from "./recyclarr.js";
 import { writeBootstrapStatus } from "./status.js";
 import { validateConfiguration } from "./validation.js";
 
@@ -46,6 +48,10 @@ interface RuntimeDirectory {
 
 export function runtimeDirectoryPlan(): readonly RuntimeDirectory[] {
   return [
+    // The official Grafana image runs as UID 472 and GID 0.
+    { path: "/data/grafana", uid: 472, gid: 0 },
+    // Prometheus persists its TSDB as the image's nobody user.
+    { path: "/data/prometheus", uid: 65_534, gid: 65_534 },
     // Recyclarr runs as UID/GID 1000 and needs to create its migration state
     // under /config when the scheduled job starts.
     { path: "/data/recyclarr", uid: 1000, gid: 1000 },
@@ -301,6 +307,12 @@ export async function bootstrap(): Promise<void> {
       created,
     });
   }
+  await reconcileRecyclarr(
+    required("SONARR_URL"),
+    await readArrApiKey("sonarr"),
+    required("RADARR_URL"),
+    await readArrApiKey("radarr"),
+  );
 
   const services = routedServices();
   const domain = optional("TRAEFIK_DOMAIN", "192.168.0.15.nip.io");

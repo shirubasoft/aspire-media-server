@@ -43,6 +43,7 @@ export class ProwlarrClient {
     applications: readonly Application[],
   ): Promise<readonly ProwlarrOptionalIntegration[]> {
     await this.reconcileProxy(proxyUrl);
+    await this.disableRetiredIndexers(["LimeTorrents"]);
     for (const application of applications) {
       await this.reconcileApplication(application);
     }
@@ -140,6 +141,29 @@ export class ProwlarrClient {
     });
   }
 
+  private async disableRetiredIndexers(
+    names: readonly string[],
+  ): Promise<void> {
+    const existing = await this.get<ProwlarrEntity[]>("/indexer");
+    for (const name of names) {
+      const current = existing.find(
+        (indexer) => indexer.name?.toLowerCase() === name.toLowerCase(),
+      );
+      if (!current?.id || current.enable === false) {
+        continue;
+      }
+      current.enable = false;
+      current.enableAutomaticSearch = false;
+      current.enableInteractiveSearch = false;
+      await this.send(
+        "PUT",
+        `/indexer/${String(current.id)}?forceSave=true`,
+        current,
+      );
+      log.info("Prowlarr retired indexer disabled", { indexer: name });
+    }
+  }
+
   private async reconcilePublicIndexers(): Promise<
     readonly ProwlarrOptionalIntegration[]
   > {
@@ -147,7 +171,6 @@ export class ProwlarrClient {
       "Nyaa.si": 5,
       EZTV: 25,
       Knaben: 20,
-      LimeTorrents: 50,
       YTS: 25,
     };
     const existing = await this.get<ProwlarrEntity[]>("/indexer");

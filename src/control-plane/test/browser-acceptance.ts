@@ -262,10 +262,10 @@ async function verifyJellyseerr(
     state: "hidden",
     timeout: 30_000,
   });
-  assert.ok(
-    (await page.title()).includes("Discover"),
-    "Jellyseerr could not log in through Jellyfin",
-  );
+  await page.getByText("Discover", { exact: true }).first().waitFor({
+    state: "visible",
+    timeout: 30_000,
+  });
   await page.goto(new URL("/settings/services", baseUrl).toString(), {
     waitUntil: "domcontentloaded",
     timeout: 60_000,

@@ -305,9 +305,18 @@ async function verifyJellyfin(): Promise<void> {
 async function verifyJellyseerr(apiKey: string): Promise<void> {
   const baseUrl = endpoint("jellyseerr");
   const headers = apiHeaders(apiKey);
-  const [publicSettings, sonarr, radarr] = await Promise.all([
+  const [publicSettings, jellyfinSettings, sonarr, radarr] = await Promise.all([
     json<{ readonly initialized?: boolean }>(
       `${baseUrl}/api/v1/settings/public`,
+    ),
+    json<{
+      readonly ip?: string;
+      readonly port?: number;
+      readonly useSsl?: boolean;
+      readonly urlBase?: string;
+    }>(
+      `${baseUrl}/api/v1/settings/jellyfin`,
+      { headers },
     ),
     json<Array<{ readonly isDefault?: boolean }>>(
       `${baseUrl}/api/v1/settings/sonarr`,
@@ -319,6 +328,13 @@ async function verifyJellyseerr(apiKey: string): Promise<void> {
     ),
   ]);
   ensure(publicSettings.initialized, "Jellyseerr is not initialized");
+  const jellyfinUrl = new URL(endpoint("jellyfin"));
+  ensure(
+    jellyfinSettings.ip === jellyfinUrl.hostname &&
+      jellyfinSettings.port === Number(jellyfinUrl.port || 8096) &&
+      jellyfinSettings.useSsl === (jellyfinUrl.protocol === "https:"),
+    "Jellyseerr Jellyfin endpoint is not reconciled",
+  );
   ensure(
     sonarr.some((service) => service.isDefault),
     "Jellyseerr has no default Sonarr",
@@ -326,6 +342,21 @@ async function verifyJellyseerr(apiKey: string): Promise<void> {
   ensure(
     radarr.some((service) => service.isDefault),
     "Jellyseerr has no default Radarr",
+  );
+  const authentication = await request(
+    `${baseUrl}/api/v1/auth/jellyfin`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: required("JELLYFIN_ADMIN_USER"),
+        password: required("JELLYFIN_ADMIN_PASSWORD"),
+      }),
+    },
+  );
+  ensure(
+    authentication.headers.get("set-cookie"),
+    "Jellyseerr could not authenticate through its configured Jellyfin server",
   );
 }
 

@@ -232,6 +232,7 @@ async function reconcileCore(results: ReconciliationResult[]): Promise<void> {
     urls.jellyfin,
     jellyfinUser,
     jellyfinPassword,
+    jellyseerrKey,
   );
   let prowlarrOptionalResults: readonly ReconciliationResult[] = [];
   await runRequiredStage(results, [

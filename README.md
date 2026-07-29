@@ -69,8 +69,9 @@ npm run locale -- neutral --apply
 
 Every parameter, provider/country selection, WireGuard key, timezone, locale,
 subtitle list, and host path is validated before the application services are
-allowed to start. Missing optional subtitle credentials remain non-fatal; a
-partially supplied username/password pair is treated as a configuration error.
+allowed to start. Missing optional subtitle credentials are listed as not
+configured without lowering core readiness; a partially supplied
+username/password pair is treated as a configuration error.
 
 ## Access and readiness
 

@@ -1,17 +1,19 @@
 import { writeIfChanged } from "./files.js";
 import { redactForLogging } from "./log.js";
+import {
+  classifyReadiness,
+  type Readiness,
+  type ReconciliationResult,
+} from "./readiness.js";
 
-export type Readiness = "ready" | "degraded" | "failed";
-
-export interface ReconciliationResult {
-  readonly name: string;
-  readonly required: boolean;
-  readonly status: "ready" | "skipped" | "failed";
-  readonly reason?: string;
-}
+export { classifyReadiness } from "./readiness.js";
+export type {
+  Readiness,
+  ReconciliationResult,
+} from "./readiness.js";
 
 export interface ReconciliationSummary {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 2;
   readonly phase: "reconciliation";
   readonly status: Readiness;
   readonly updatedAt: string;
@@ -19,21 +21,6 @@ export interface ReconciliationSummary {
 }
 
 const statusDirectory = "/data/status";
-
-export function classifyReadiness(
-  results: readonly ReconciliationResult[],
-): Readiness {
-  if (
-    results.some(
-      (result) => result.required && result.status === "failed",
-    )
-  ) {
-    return "failed";
-  }
-  return results.some((result) => result.status !== "ready")
-    ? "degraded"
-    : "ready";
-}
 
 export async function writeBootstrapStatus(): Promise<void> {
   await writeIfChanged(
@@ -60,7 +47,7 @@ export async function writeReconciliationStatus(
   ) as readonly ReconciliationResult[];
   const status = classifyReadiness(redactedResults);
   const summary: ReconciliationSummary = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     phase: "reconciliation",
     status,
     updatedAt: new Date().toISOString(),

@@ -78,10 +78,13 @@ Traefik dashboard https://traefik.192.168.0.15.nip.io:8443        Arrspire ingre
 
 Readiness
 bootstrap         ready
-reconciliation    degraded
+reconciliation    attention
 
-Integrations requiring attention
-subtitle-provider:OpenSubtitles.com skipped  credentials were not supplied
+External services unavailable
+public-indexer:EZTV  Unable to access EZTV, blocked by Cloudflare protection
+
+Optional integrations not configured
+subtitle-provider:OpenSubtitles.org  credentials were not supplied
 ```
 
 The checked-in default targets the current server at
@@ -99,11 +102,12 @@ npm run network:allow-lan
 
 Set `ARRSPIRE_LAN_CIDR` when the default route is not the client-facing LAN.
 
-`ready` means all configured integrations converged. `degraded` means the core
-stack is usable but an optional integration was skipped or failed. `failed`
-means a required integration did not converge. The latest machine-readable
-summaries live in `data/status/`, and the reconciler logs the same redacted
-summary in the Aspire dashboard.
+`ready` means every configured integration converged; optional integrations
+that were never configured remain informational. `attention` means the core
+stack is usable but a configured optional integration or external service
+failed. `failed` means a required integration did not converge. The latest
+machine-readable summaries live in `data/status/`, and the reconciler logs the
+same redacted summary in the Aspire dashboard.
 
 After adding or correcting credentials:
 
@@ -201,7 +205,7 @@ container logs are outside that filter; inspect them before sharing.
    secrets from the same backup point.
 3. Confirm paths are owned/writable by the configured host user.
 4. Deploy and run `npm run status`.
-5. If bootstrap is ready but reconciliation is degraded/failed, run
+5. If bootstrap is ready but reconciliation needs attention or failed, run
    `npm run repair`.
 6. Verify ingress authentication, Jellyfin login/libraries, qBittorrent
    categories, Arr download clients/root folders, Prowlarr applications,

@@ -13,6 +13,12 @@ import {
   credentialSources,
   serviceSurfaces,
 } from "../control-plane/src/service-surfaces.js";
+import {
+  classifyResult,
+  compactReason,
+  type ReconciliationResult,
+  type ResultCategory,
+} from "../control-plane/src/readiness.js";
 
 type Action = "deploy" | "down" | "publish" | "repair" | "status";
 type Engine = "docker" | "podman";
@@ -269,6 +275,44 @@ async function readStatusFile(
   }
 }
 
+function reconciliationResults(
+  value: unknown,
+): readonly ReconciliationResult[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter(
+    (result): result is ReconciliationResult =>
+      typeof result === "object" &&
+      result !== null &&
+      typeof (result as { name?: unknown }).name === "string" &&
+      typeof (result as { required?: unknown }).required === "boolean" &&
+      ["ready", "skipped", "failed"].includes(
+        String((result as { status?: unknown }).status),
+      ),
+  );
+}
+
+function printResultSection(
+  title: string,
+  category: ResultCategory,
+  results: readonly ReconciliationResult[],
+): void {
+  const matches = results.filter(
+    (result) => classifyResult(result) === category,
+  );
+  if (matches.length === 0) {
+    return;
+  }
+  console.log(title);
+  console.table(
+    matches.map((result) => ({
+      integration: result.name,
+      reason: compactReason(result.reason),
+    })),
+  );
+}
+
 async function printStatus(engine?: Engine): Promise<void> {
   const values = await environmentValues();
   let httpsPort = 443;
@@ -317,18 +361,22 @@ async function printStatus(engine?: Engine): Promise<void> {
       updatedAt: reconciliation?.updatedAt ?? "-",
     },
   ]);
-  if (Array.isArray(reconciliation?.results)) {
-    const attention = reconciliation.results.filter(
-      (result) =>
-        typeof result === "object" &&
-        result !== null &&
-        (result as { status?: unknown }).status !== "ready",
-    );
-    if (attention.length > 0) {
-      console.log("Integrations requiring attention");
-      console.table(attention);
-    }
-  }
+  const results = reconciliationResults(reconciliation?.results);
+  printResultSection(
+    "Needs attention",
+    "needs-attention",
+    results,
+  );
+  printResultSection(
+    "External services unavailable",
+    "externally-unavailable",
+    results,
+  );
+  printResultSection(
+    "Optional integrations not configured",
+    "not-configured",
+    results,
+  );
 
   if (engine !== undefined) {
     try {
@@ -343,7 +391,7 @@ async function printStatus(engine?: Engine): Promise<void> {
     }
   }
   console.log(
-    "If readiness is degraded or failed, add/correct credentials and run npm run repair.",
+    "If readiness needs attention or has failed, correct the issue and run npm run repair.",
   );
 }
 

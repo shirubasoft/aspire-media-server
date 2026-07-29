@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   fail2banFilter,
+  homepageServices,
+  homepageSettings,
   runtimeDirectoryPlan,
   traefikDynamicConfiguration,
 } from "../src/bootstrap.js";
@@ -122,6 +124,77 @@ void test("keeps the legacy Jellyseerr hostname as a Seerr alias", () => {
     /rule: 'Host\(`seerr\.localhost`\) \|\| Host\(`jellyseerr\.localhost`\)'/u,
   );
   assert.match(configuration, /url: "http:\/\/seerr:5055"/u);
+});
+
+void test("routes the bare domain and home alias to the protected portal", () => {
+  const configuration = traefikDynamicConfiguration(
+    "home.example.com",
+    {
+      homepage: {
+        url: "http://homepage:3000",
+        authentication: "ingress",
+        hosts: ["home.example.com", "home.home.example.com"],
+      },
+    },
+    "operator",
+    "secret",
+  );
+
+  assert.match(
+    configuration,
+    /rule: 'Host\(`home\.example\.com`\) \|\| Host\(`home\.home\.example\.com`\)'/u,
+  );
+  assert.match(
+    configuration,
+    /homepage:\n[\s\S]*?middlewares: \[admin-auth\]/u,
+  );
+});
+
+void test("generates a secure, useful Homepage configuration", () => {
+  const services = Object.fromEntries(
+    [
+      "aspire",
+      "bazarr",
+      "duplicati",
+      "grafana",
+      "jellyfin",
+      "lidarr",
+      "prometheus",
+      "prowlarr",
+      "qbittorrent",
+      "radarr",
+      "seerr",
+      "sonarr",
+      "tdarr",
+    ].map((name) => [
+      name,
+      {
+        url: `http://${name}:1234`,
+        authentication: "ingress" as const,
+      },
+    ]),
+  );
+  const configuration = homepageServices(
+    "home.example.com",
+    8443,
+    services,
+  );
+
+  assert.match(homepageSettings(), /disableIndexing: true/u);
+  assert.match(
+    configuration,
+    /href: "https:\/\/jellyfin\.home\.example\.com:8443"/u,
+  );
+  assert.match(configuration, /type: sonarr/u);
+  assert.match(
+    configuration,
+    /key: "\{\{HOMEPAGE_FILE_SONARR_KEY\}\}"/u,
+  );
+  assert.match(
+    configuration,
+    /password: "\{\{HOMEPAGE_FILE_QBITTORRENT_PASSWORD\}\}"/u,
+  );
+  assert.doesNotMatch(configuration, /api-key-value|password-value/u);
 });
 
 void test("does not ban browser clients for ordinary missing routes", () => {

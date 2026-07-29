@@ -30,6 +30,11 @@ interface BrowserSurface {
 
 const administrativeSurfaces: readonly BrowserSurface[] = [
   {
+    service: "home",
+    title: "Homepage",
+    marker: 'a[href*="jellyfin."]',
+  },
+  {
     service: "sonarr",
     title: "Sonarr",
     marker: 'input[name="seriesSearch"]',

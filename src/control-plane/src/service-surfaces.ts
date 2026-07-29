@@ -16,6 +16,11 @@ export interface CredentialSource {
 }
 
 export const serviceSurfaces = [
+  {
+    name: "home",
+    label: "Arrspire home",
+    authentication: "ingress",
+  },
   { name: "jellyfin", label: "Jellyfin", authentication: "service" },
   { name: "seerr", label: "Seerr", authentication: "service" },
   { name: "sonarr", label: "Sonarr", authentication: "ingress" },

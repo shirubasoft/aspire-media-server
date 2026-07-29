@@ -71,6 +71,16 @@ assert.match(
 );
 assert.match(
   compose,
+  /homepage:[\s\S]*?HOMEPAGE_ALLOWED_HOSTS: "\$\{TRAEFIK_DOMAIN\},home\.\$\{TRAEFIK_DOMAIN\},/u,
+  "Homepage must restrict requests to the generated ingress hostnames",
+);
+assert.match(
+  compose,
+  /homepage:[\s\S]*?target: "\/app\/config"[\s\S]*?read_only: true/u,
+  "Homepage must mount its generated configuration read-only",
+);
+assert.match(
+  compose,
   /traefik:[\s\S]*?CF_DNS_API_TOKEN: "\$\{CLOUDFLARE_DNS_API_TOKEN\}"/u,
   "Traefik must receive the Cloudflare token through a Compose environment placeholder",
 );

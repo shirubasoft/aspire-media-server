@@ -230,18 +230,30 @@ async function runAcceptance(
       "traefik",
       "https",
     );
-    await verifyBrowserAcceptance({
-      ingressUrl,
-      dashboardUrl: appHost.dashboardUrl,
-      domain: environment.Parameters__traefik_domain!,
-      ingressUsername: environment.Parameters__ingress_admin_user!,
-      ingressPassword: environment.Parameters__ingress_admin_password!,
-      jellyfinUsername: "admin",
-      jellyfinPassword: environment.Parameters__jellyfin_admin_password!,
-      qbittorrentPassword: environment.Parameters__qbittorrent_password!,
-      duplicatiPassword: environment.Parameters__duplicati_web_password!,
-      grafanaPassword: environment.Parameters__grafana_admin_password!,
-    });
+    try {
+      await verifyBrowserAcceptance({
+        ingressUrl,
+        dashboardUrl: appHost.dashboardUrl,
+        domain: environment.Parameters__traefik_domain!,
+        ingressUsername: environment.Parameters__ingress_admin_user!,
+        ingressPassword: environment.Parameters__ingress_admin_password!,
+        jellyfinUsername: "admin",
+        jellyfinPassword: environment.Parameters__jellyfin_admin_password!,
+        qbittorrentPassword: environment.Parameters__qbittorrent_password!,
+        duplicatiPassword: environment.Parameters__duplicati_web_password!,
+        grafanaPassword: environment.Parameters__grafana_admin_password!,
+      });
+    } catch (error) {
+      const diagnosticLogs = await Promise.all(
+        ["homepage", "traefik"].map(async (resource) =>
+          `### ${resource}\n${await resourceLogs(appHostDirectory, resource)}`,
+        ),
+      );
+      throw new Error(
+        `Browser acceptance failed: ${error instanceof Error ? error.message : String(error)}\n\n${diagnosticLogs.join("\n\n")}`,
+        { cause: error },
+      );
+    }
   } finally {
     await stopAppHost(appHost);
   }

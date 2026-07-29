@@ -10,6 +10,7 @@ import {
   addFail2ban,
   addGluetun,
   addGrafana,
+  addHomepage,
   addJellyfin,
   addLidarr,
   addPrometheus,
@@ -30,6 +31,7 @@ import {
   type Fail2banResource,
   type GluetunResource,
   type GrafanaResource,
+  type HomepageResource,
   type JellyfinResource,
   type LidarrResource,
   type PrometheusResource,
@@ -65,6 +67,7 @@ export type ArrspireTopology = Readonly<{
   diun: DiunResource;
   prometheus: PrometheusResource;
   grafana: GrafanaResource;
+  homepage: HomepageResource;
   bootstrap: BootstrapResource;
   reconciler: ReconcilerResource;
   acceptance?: AcceptanceResource;
@@ -101,6 +104,7 @@ export async function addArrspireTopology(
   const diun = addDiun(context);
   const prometheus = addPrometheus(context);
   const grafana = addGrafana(context, prometheus);
+  const homepage = await addHomepage(context);
 
   const applicationEndpoints = {
     sonarr: sonarr.http,
@@ -113,6 +117,7 @@ export async function addArrspireTopology(
     qbittorrent: qbittorrent.http,
     tdarr: tdarr.webUi,
     duplicati: duplicati.http,
+    homepage: homepage.http,
   };
 
   const bootstrap = addBootstrap(context, {
@@ -139,6 +144,7 @@ export async function addArrspireTopology(
     diun.resource,
     prometheus.resource,
     grafana.resource,
+    homepage.resource,
   ];
 
   await Promise.all(
@@ -181,7 +187,7 @@ export async function addArrspireTopology(
           context,
           reconciliationEndpoints,
           reconciler,
-          reconciledResources,
+          [...reconciledResources, homepage.resource],
         )
       : undefined;
 
@@ -203,6 +209,7 @@ export async function addArrspireTopology(
       diun.resource,
       prometheus.resource,
       grafana.resource,
+      homepage.resource,
     ].map((resource) => withComposeRestart(resource)),
     withComposeInit(seerr.resource),
     withComposeRestart(reconciler.resource, "on-failure:5"),
@@ -226,6 +233,7 @@ export async function addArrspireTopology(
     diun,
     prometheus,
     grafana,
+    homepage,
     bootstrap,
     reconciler,
     ...(acceptance === undefined ? {} : { acceptance }),

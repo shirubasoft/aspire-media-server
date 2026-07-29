@@ -60,6 +60,15 @@ async function verifyBootstrapFiles(): Promise<void> {
     "/data/fail2ban/filter.d/traefik-auth.conf",
     "/data/fail2ban/jail.d/traefik.conf",
     "/data/grafana-provisioning/datasources/prometheus.yml",
+    "/data/homepage/bookmarks.yaml",
+    "/data/homepage/custom.css",
+    "/data/homepage/custom.js",
+    "/data/homepage/docker.yaml",
+    "/data/homepage/kubernetes.yaml",
+    "/data/homepage/proxmox.yaml",
+    "/data/homepage/services.yaml",
+    "/data/homepage/settings.yaml",
+    "/data/homepage/widgets.yaml",
     "/data/prometheus-config/prometheus.yml",
     "/data/recyclarr/recyclarr.yml",
     "/data/status/bootstrap.json",
@@ -81,9 +90,10 @@ async function verifyBootstrapFiles(): Promise<void> {
     "utf8",
   );
   ensure(
-    ingress.includes("Host(`aspire.") &&
+    ingress.includes(`Host(\`${required("TRAEFIK_DOMAIN")}\`)`) &&
+      ingress.includes("Host(`aspire.") &&
       ingress.includes("http://arrspire-dashboard:18888"),
-    "Aspire dashboard is not protected by the application ingress",
+    "Arrspire home or the Aspire dashboard is not protected by ingress",
   );
 
   const pluginDirectories = await readdir("/data/jellyfin/plugins");

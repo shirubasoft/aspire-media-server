@@ -14,7 +14,7 @@ Aspire 13.4.6.
 - Jellyfin, Seerr, Recyclarr
 - Duplicati, Tdarr, Diun
 - Traefik, Fail2ban
-- Prometheus, Grafana, and the Aspire dashboard
+- Homepage, Prometheus, Grafana, and the Aspire dashboard
 
 The bootstrap creates stable API keys and initial configuration files before
 services start. The reconciler then connects qBittorrent to the Arr apps,
@@ -92,6 +92,12 @@ credentials with:
 npm run status
 npm run repair
 ```
+
+The generated Homepage portal is available at the configured bare domain and
+at `home.<domain>`. It groups watch/request, library automation, download,
+processing, and operations surfaces; its Arr and qBittorrent widgets use
+root-only secret files generated during bootstrap. The portal has no direct
+host port and remains behind Arrspire ingress authentication.
 
 For trusted local-browser HTTPS, generate a stable local certificate and add
 its CA to the current user's browser trust database, then restart the browser:

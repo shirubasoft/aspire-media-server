@@ -72,6 +72,7 @@ prints it again without revealing secret values. Representative output:
 
 ```text
 Arrspire access (HTTPS)
+Arrspire home     https://home.192.168.0.15.nip.io:8443           Arrspire ingress credentials
 Jellyfin          https://jellyfin.192.168.0.15.nip.io:8443       Service credentials
 Sonarr            https://sonarr.192.168.0.15.nip.io:8443         Arrspire ingress credentials
 Traefik dashboard https://traefik.192.168.0.15.nip.io:8443        Arrspire ingress credentials
@@ -86,6 +87,11 @@ public-indexer:EZTV  Unable to access EZTV, blocked by Cloudflare protection
 Optional integrations not configured
 subtitle-provider:OpenSubtitles.org  credentials were not supplied
 ```
+
+The same portal is routed from the configured bare domain. Homepage reads
+service API keys from mode-`0600` files under `data/homepage/secrets/`; its
+generated YAML contains only file references. Keep the portal behind the
+administrative ingress boundary.
 
 The checked-in default targets the current server at
 `192.168.0.15.nip.io`. Override it with

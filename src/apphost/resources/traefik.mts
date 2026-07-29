@@ -2,7 +2,10 @@ import { join } from "node:path";
 import { images } from "../images.mjs";
 
 import type { EndpointReferencePromise } from "../../.aspire/modules/aspire.mjs";
-import { resolveIngressPorts } from "../ingress.mjs";
+import {
+  resolveIngressPorts,
+  traefikHttpsRedirectTarget,
+} from "../ingress.mjs";
 import {
   type ArrspireResource,
   type ResourceContext,
@@ -28,7 +31,7 @@ export function addTraefik(
     .withEnvironment("TRAEFIK_ENTRYPOINTS_WEBSECURE_ADDRESS", ":443")
     .withEnvironment(
       "TRAEFIK_ENTRYPOINTS_WEB_HTTP_REDIRECTIONS_ENTRYPOINT_TO",
-      "websecure",
+      traefikHttpsRedirectTarget(ingressPorts.https),
     )
     .withEnvironment(
       "TRAEFIK_ENTRYPOINTS_WEB_HTTP_REDIRECTIONS_ENTRYPOINT_SCHEME",

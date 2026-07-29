@@ -45,6 +45,14 @@ export function addReconciler(
           context.parameters.qbittorrentPassword,
         )
         .withEnvironment(
+          "DUPLICATI_WEB_PASSWORD",
+          context.parameters.duplicatiWebPassword,
+        )
+        .withEnvironment(
+          "DUPLICATI_ENCRYPTION_KEY",
+          context.parameters.duplicatiEncryptionKey,
+        )
+        .withEnvironment(
           "SUBTITLE_LANGUAGES",
           context.parameters.subtitleLanguages,
         )

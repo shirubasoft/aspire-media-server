@@ -12,7 +12,6 @@ export interface ArrspirePaths {
 
 export function resolveArrspirePaths(
   appHostDirectory: string,
-  isRunMode: boolean,
 ): ArrspirePaths {
   const repositoryRoot = resolve(appHostDirectory, "..");
   const podmanSocket = `/run/user/${process.getuid?.().toString() ?? "1000"}/podman/podman.sock`;
@@ -29,6 +28,6 @@ export function resolveArrspirePaths(
     containerSocket:
       process.env.ARRSPIRE_CONTAINER_SOCKET ??
       (podmanSocketAvailable ? podmanSocket : "/var/run/docker.sock"),
-    rootlessPodman: isRunMode && podmanSocketAvailable,
+    rootlessPodman: podmanSocketAvailable,
   };
 }

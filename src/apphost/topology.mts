@@ -110,12 +110,12 @@ export async function addArrspireTopology(
     jellyfin: jellyfin.http,
     jellyseerr: jellyseerr.http,
     qbittorrent: qbittorrent.http,
+    tdarr: tdarr.webUi,
+    duplicati: duplicati.http,
   };
 
   const bootstrap = addBootstrap(context, {
     ...applicationEndpoints,
-    duplicati: duplicati.http,
-    tdarr: tdarr.webUi,
     prometheus: prometheus.http,
     grafana: grafana.http,
   });
@@ -156,6 +156,7 @@ export async function addArrspireTopology(
     bazarr.resource,
     jellyfin.resource,
     jellyseerr.resource,
+    tdarr.resource,
   ];
   const reconciliationEndpoints = {
     gluetunProxy: gluetun.httpProxy,

@@ -75,7 +75,10 @@ partially supplied username/password pair is treated as a configuration error.
 ## Access and readiness
 
 Traefik is the only application resource that publishes host ports by default.
-It redirects HTTP to HTTPS and requires the generated Arrspire ingress
+It uses ports 80/443 on rootful Docker or Podman and automatically uses
+unprivileged ports 8080/8443 with rootless Podman. Override the host ports with
+`ARRSPIRE_INGRESS_HTTP_PORT` and `ARRSPIRE_INGRESS_HTTPS_PORT` when needed.
+Traefik redirects HTTP to HTTPS and requires the generated Arrspire ingress
 credentials for administrative UIs. Jellyfin and Jellyseerr retain their own
 service authentication. The insecure Traefik dashboard and direct service
 ports are disabled.
@@ -88,6 +91,17 @@ credentials with:
 npm run status
 npm run repair
 ```
+
+For trusted local-browser HTTPS, generate a stable local certificate and add
+its CA to the current user's browser trust database, then restart the browser:
+
+```bash
+npm run tls:local
+```
+
+The certificate and private CA stay under ignored
+`data/traefik/dynamic/certs/` with restrictive permissions. Do not copy the
+local CA private key to another machine.
 
 Local Aspire users can rerun the completed reconciler with
 `aspire resource reconciler start --non-interactive`; its structured summary

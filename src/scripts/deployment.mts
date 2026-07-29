@@ -2,6 +2,13 @@ import { spawn } from "node:child_process";
 import { access, chmod, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
+import { selectComposeProjectName } from "../apphost/compose-project.mjs";
+import {
+  defaultTraefikDomain,
+  httpsServiceUrl,
+  publishedTraefikHttpsPort,
+} from "../apphost/ingress.mjs";
+
 type Action = "deploy" | "down" | "publish" | "repair" | "status";
 type Engine = "docker" | "podman";
 
@@ -50,6 +57,59 @@ async function run(
       );
     });
   });
+}
+
+async function output(
+  command: string,
+  args: readonly string[],
+): Promise<string> {
+  return await new Promise<string>((resolvePromise, reject) => {
+    const child = spawn(command, args, {
+      cwd: process.cwd(),
+      env: process.env,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    const chunks: Buffer[] = [];
+    child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
+    child.once("error", reject);
+    child.once("exit", (code, signal) => {
+      if (code === 0) {
+        resolvePromise(Buffer.concat(chunks).toString("utf8"));
+        return;
+      }
+      reject(
+        new Error(
+          `${command} exited with ${String(code)}${signal ? ` (${signal})` : ""}`,
+        ),
+      );
+    });
+  });
+}
+
+async function composeArguments(
+  engine: Engine,
+  command: readonly string[],
+): Promise<readonly string[]> {
+  let projectName: string | undefined;
+  try {
+    projectName = selectComposeProjectName(
+      await output(engine, ["compose", "ls", "--format", "json"]),
+      composeFile,
+    );
+  } catch {
+    // Before the first deployment, Compose has no matching project yet.
+  }
+  return [
+    "compose",
+    ...(projectName === undefined
+      ? []
+      : ["--project-name", projectName]),
+    "--env-file",
+    deploymentEnvironmentFile,
+    "--file",
+    composeFile,
+    ...command,
+  ];
 }
 
 async function available(engine: Engine): Promise<boolean> {
@@ -118,15 +178,10 @@ async function down(engine: Engine): Promise<void> {
       `No prepared ${environment} deployment exists in ${outputDirectory}. Run npm run deploy first.`,
     );
   }
-  await run(engine, [
-    "compose",
-    "--env-file",
-    deploymentEnvironmentFile,
-    "--file",
-    composeFile,
-    "down",
-    "--remove-orphans",
-  ]);
+  await run(
+    engine,
+    await composeArguments(engine, ["down", "--remove-orphans"]),
+  );
 }
 
 async function environmentValues(): Promise<
@@ -169,10 +224,18 @@ async function readStatusFile(
 
 async function printStatus(engine?: Engine): Promise<void> {
   const values = await environmentValues();
+  let httpsPort = 443;
+  try {
+    httpsPort = publishedTraefikHttpsPort(
+      await readFile(composeFile, "utf8"),
+    );
+  } catch {
+    // The conventional HTTPS port is still the useful pre-publication default.
+  }
   const domain =
     values.TRAEFIK_DOMAIN ??
     process.env.Parameters__traefik_domain ??
-    "localhost";
+    defaultTraefikDomain;
   const dataPath =
     values.BOOTSTRAP_BINDMOUNT_0 ??
     process.env.ARRSPIRE_DATA_PATH ??
@@ -198,7 +261,7 @@ async function printStatus(engine?: Engine): Promise<void> {
       const service = label.toLowerCase().split(" ")[0];
       return {
         service: label,
-        url: `https://${service}.${domain}`,
+        url: httpsServiceUrl(service, domain, httpsPort),
         authentication: ingressAuthentication
           ? "Arrspire ingress credentials"
           : "Service credentials",
@@ -271,14 +334,7 @@ async function printStatus(engine?: Engine): Promise<void> {
         access(deploymentEnvironmentFile),
       ]);
       console.log("Container state");
-      await run(engine, [
-        "compose",
-        "--env-file",
-        deploymentEnvironmentFile,
-        "--file",
-        composeFile,
-        "ps",
-      ]);
+      await run(engine, await composeArguments(engine, ["ps"]));
     } catch {
       console.log("No prepared deployment is available for container status.");
     }
@@ -293,16 +349,10 @@ async function repair(engine: Engine): Promise<void> {
     access(composeFile),
     access(deploymentEnvironmentFile),
   ]);
-  await run(engine, [
-    "compose",
-    "--env-file",
-    deploymentEnvironmentFile,
-    "--file",
-    composeFile,
-    "run",
-    "--rm",
-    "reconciler",
-  ]);
+  await run(
+    engine,
+    await composeArguments(engine, ["run", "--rm", "reconciler"]),
+  );
   await printStatus(engine);
 }
 

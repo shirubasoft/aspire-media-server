@@ -29,7 +29,7 @@ await builder
   });
 
 const parameters = addArrspireParameters(builder);
-const paths = resolveArrspirePaths(appHostDirectory, isRunMode);
+const paths = resolveArrspirePaths(appHostDirectory);
 validateArrspirePaths(paths);
 
 await addArrspireTopology(builder, parameters, paths, isRunMode);

@@ -36,6 +36,10 @@ export function addDuplicati(
       "DUPLICATI__WEBSERVICE_PASSWORD",
       context.parameters.duplicatiWebPassword,
     )
+    // The container is only reachable through Traefik and still enforces its
+    // own generated web password. Without this, Duplicati returns 403 before
+    // its password UI can load.
+    .withEnvironment("DUPLICATI__WEBSERVICE_ALLOWED_HOSTNAMES", "*")
     .withBindMount(join(context.paths.data, "duplicati"), "/data")
     .withBindMount(join(context.paths.data, "backups"), "/backups");
 

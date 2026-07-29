@@ -2,6 +2,7 @@ import type {
   DistributedApplicationBuilder,
   ParameterResourcePromise,
 } from "../.aspire/modules/aspire.mjs";
+import { defaultTraefikDomain } from "./ingress.mjs";
 
 export interface ArrspireParameters {
   readonly vpnProvider: ParameterResourcePromise;
@@ -112,7 +113,7 @@ export function addArrspireParameters(
       publishValueAsDefault: true,
     }),
     traefikDomain: builder.addParameter("traefik-domain", {
-      value: "localhost",
+      value: defaultTraefikDomain,
       publishValueAsDefault: true,
     }),
     ingressAdminUser: builder.addParameter("ingress-admin-user", {

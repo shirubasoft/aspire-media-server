@@ -144,7 +144,9 @@ export class ProwlarrClient {
     readonly ProwlarrOptionalIntegration[]
   > {
     const desired: Readonly<Record<string, number>> = {
+      "Nyaa.si": 5,
       EZTV: 25,
+      Knaben: 20,
       LimeTorrents: 50,
       YTS: 25,
     };

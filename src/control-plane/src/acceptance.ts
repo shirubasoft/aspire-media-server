@@ -62,6 +62,16 @@ async function verifyBootstrapFiles(): Promise<void> {
     "Recyclarr configuration is incomplete",
   );
 
+  const ingress = await readFile(
+    "/data/traefik/dynamic/services.yml",
+    "utf8",
+  );
+  ensure(
+    ingress.includes("Host(`aspire.") &&
+      ingress.includes("http://arrspire-dashboard:18888"),
+    "Aspire dashboard is not protected by the application ingress",
+  );
+
   const pluginDirectories = await readdir("/data/jellyfin/plugins");
   for (const plugin of [
     "Bazarr_",
@@ -130,23 +140,22 @@ async function verifyQBittorrent(baseUrl: string): Promise<void> {
       { headers },
     ),
   ]);
-  const proxy = new URL(endpoint("gluetun_proxy"));
   ensure(
-    preferences.proxy_type === "HTTP",
-    "qBittorrent HTTP proxy is disabled",
+    preferences.proxy_type === "None",
+    "qBittorrent has a redundant application proxy despite VPN networking",
   );
   ensure(
-    preferences.proxy_ip === proxy.hostname,
-    "qBittorrent proxy host does not target Gluetun",
+    preferences.proxy_peer_connections === false,
+    "qBittorrent peer traffic is still forced through an HTTP proxy",
   );
   ensure(
-    Number(preferences.proxy_port) === Number(proxy.port || 8888),
-    "qBittorrent proxy port does not target Gluetun",
+    preferences.proxy_bittorrent === false,
+    "qBittorrent tracker traffic is still forced through an HTTP proxy",
   );
   for (const [name, path] of Object.entries({
-    sonarr: "/tv",
-    radarr: "/movies",
-    lidarr: "/music",
+    sonarr: "/downloads/sonarr",
+    radarr: "/downloads/radarr",
+    lidarr: "/downloads/lidarr",
   })) {
     ensure(
       categories[name]?.savePath === path,
@@ -190,9 +199,10 @@ async function verifyArr(
 async function verifyProwlarr(apiKey: string): Promise<void> {
   const baseUrl = endpoint("prowlarr");
   const headers = apiHeaders(apiKey);
-  const [host, applications] = await Promise.all([
+  const [host, applications, indexers] = await Promise.all([
     json<JsonObject>(`${baseUrl}/api/v1/config/host`, { headers }),
     json<ArrEntity[]>(`${baseUrl}/api/v1/applications`, { headers }),
+    json<JsonObject[]>(`${baseUrl}/api/v1/indexer`, { headers }),
   ]);
   ensure(host.proxyEnabled === true, "Prowlarr VPN proxy is disabled");
   for (const application of ["Sonarr", "Radarr", "Lidarr"]) {
@@ -203,6 +213,12 @@ async function verifyProwlarr(apiKey: string): Promise<void> {
       `Prowlarr ${application} application is missing`,
     );
   }
+  ensure(
+    indexers.some(
+      (indexer) => indexer.name === "Knaben" && indexer.enable === true,
+    ),
+    "Prowlarr Knaben music indexer is missing or disabled",
+  );
 }
 
 async function verifyBazarr(apiKey: string): Promise<void> {
@@ -305,9 +321,18 @@ async function verifyJellyfin(): Promise<void> {
 async function verifyJellyseerr(apiKey: string): Promise<void> {
   const baseUrl = endpoint("jellyseerr");
   const headers = apiHeaders(apiKey);
-  const [publicSettings, sonarr, radarr] = await Promise.all([
+  const [publicSettings, jellyfinSettings, sonarr, radarr] = await Promise.all([
     json<{ readonly initialized?: boolean }>(
       `${baseUrl}/api/v1/settings/public`,
+    ),
+    json<{
+      readonly ip?: string;
+      readonly port?: number;
+      readonly useSsl?: boolean;
+      readonly urlBase?: string;
+    }>(
+      `${baseUrl}/api/v1/settings/jellyfin`,
+      { headers },
     ),
     json<Array<{ readonly isDefault?: boolean }>>(
       `${baseUrl}/api/v1/settings/sonarr`,
@@ -319,6 +344,13 @@ async function verifyJellyseerr(apiKey: string): Promise<void> {
     ),
   ]);
   ensure(publicSettings.initialized, "Jellyseerr is not initialized");
+  const jellyfinUrl = new URL(endpoint("jellyfin"));
+  ensure(
+    jellyfinSettings.ip === jellyfinUrl.hostname &&
+      jellyfinSettings.port === Number(jellyfinUrl.port || 8096) &&
+      jellyfinSettings.useSsl === (jellyfinUrl.protocol === "https:"),
+    "Jellyseerr Jellyfin endpoint is not reconciled",
+  );
   ensure(
     sonarr.some((service) => service.isDefault),
     "Jellyseerr has no default Sonarr",
@@ -326,6 +358,21 @@ async function verifyJellyseerr(apiKey: string): Promise<void> {
   ensure(
     radarr.some((service) => service.isDefault),
     "Jellyseerr has no default Radarr",
+  );
+  const authentication = await request(
+    `${baseUrl}/api/v1/auth/jellyfin`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: required("JELLYFIN_ADMIN_USER"),
+        password: required("JELLYFIN_ADMIN_PASSWORD"),
+      }),
+    },
+  );
+  ensure(
+    authentication.headers.get("set-cookie"),
+    "Jellyseerr could not authenticate through its configured Jellyfin server",
   );
 }
 

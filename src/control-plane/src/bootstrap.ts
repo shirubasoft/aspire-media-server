@@ -1,5 +1,5 @@
 import { createHash, pbkdf2Sync, randomBytes } from "node:crypto";
-import { mkdir } from "node:fs/promises";
+import { chown, mkdir } from "node:fs/promises";
 
 import { optional, required } from "./environment.js";
 import { writeIfChanged, writeOnce } from "./files.js";
@@ -37,6 +37,28 @@ const dataDirectories = [
   "traefik/dynamic",
   "traefik/logs",
 ] as const;
+
+interface RuntimeDirectory {
+  readonly path: string;
+  readonly uid: number;
+  readonly gid: number;
+}
+
+export function runtimeDirectoryPlan(): readonly RuntimeDirectory[] {
+  return [
+    // Recyclarr runs as UID/GID 1000 and needs to create its migration state
+    // under /config when the scheduled job starts.
+    { path: "/data/recyclarr", uid: 1000, gid: 1000 },
+    { path: "/media/movies", uid: 1000, gid: 1000 },
+    { path: "/media/tv", uid: 1000, gid: 1000 },
+    { path: "/media/music", uid: 1000, gid: 1000 },
+    { path: "/downloads", uid: 1000, gid: 1000 },
+    { path: "/downloads/incomplete", uid: 1000, gid: 1000 },
+    { path: "/downloads/sonarr", uid: 1000, gid: 1000 },
+    { path: "/downloads/radarr", uid: 1000, gid: 1000 },
+    { path: "/downloads/lidarr", uid: 1000, gid: 1000 },
+  ];
+}
 
 interface ArrBootstrap {
   readonly name: "sonarr" | "radarr" | "lidarr" | "prowlarr";
@@ -108,13 +130,23 @@ interface RoutedService {
 
 function routedServices(): Readonly<Record<string, RoutedService>> {
   return {
+    aspire: {
+      url: optional(
+        "ASPIRE_DASHBOARD_URL",
+        "http://arrspire-dashboard:18888",
+      ),
+      requiresIngressAuthentication: true,
+    },
     bazarr: {
       url: required("BAZARR_URL"),
       requiresIngressAuthentication: true,
     },
     duplicati: {
       url: required("DUPLICATI_URL"),
-      requiresIngressAuthentication: true,
+      // Duplicati authenticates API calls with a Bearer token. Applying
+      // Traefik BasicAuth here would consume the same Authorization header
+      // and make the web UI fail immediately after a successful login.
+      requiresIngressAuthentication: false,
     },
     grafana: {
       url: required("GRAFANA_URL"),
@@ -159,7 +191,7 @@ function routedServices(): Readonly<Record<string, RoutedService>> {
   };
 }
 
-function traefikDynamicConfiguration(
+export function traefikDynamicConfiguration(
   domain: string,
   services: Readonly<Record<string, RoutedService>>,
   ingressUser: string,
@@ -202,8 +234,8 @@ ${serviceLines.join("\n")}
 `;
 }
 
-const fail2banFilter = `[Definition]
-failregex = ^<HOST> .* "(GET|POST|HEAD).*" (401|403|404|429) .*
+export const fail2banFilter = `[Definition]
+failregex = ^<HOST> .* "(GET|POST|HEAD).*" (401|403|429) .*
 ignoreregex =
 `;
 
@@ -246,12 +278,10 @@ export async function bootstrap(): Promise<void> {
   await Promise.all(
     dataDirectories.map((path) => mkdir(`/data/${path}`, { recursive: true })),
   );
-  await Promise.all([
-    mkdir("/media/movies", { recursive: true }),
-    mkdir("/media/tv", { recursive: true }),
-    mkdir("/media/music", { recursive: true }),
-    mkdir("/downloads/incomplete", { recursive: true }),
-  ]);
+  for (const directory of runtimeDirectoryPlan()) {
+    await mkdir(directory.path, { recursive: true });
+    await chown(directory.path, directory.uid, directory.gid);
+  }
   await installJellyfinPlugins();
 
   const password = required("QBITTORRENT_PASSWORD");
@@ -273,7 +303,7 @@ export async function bootstrap(): Promise<void> {
   }
 
   const services = routedServices();
-  const domain = optional("TRAEFIK_DOMAIN", "localhost");
+  const domain = optional("TRAEFIK_DOMAIN", "192.168.0.15.nip.io");
   const ingressUser = required("INGRESS_ADMIN_USER");
   const ingressPassword = required("INGRESS_ADMIN_PASSWORD");
   await Promise.all([

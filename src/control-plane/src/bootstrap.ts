@@ -46,6 +46,9 @@ interface RuntimeDirectory {
 
 export function runtimeDirectoryPlan(): readonly RuntimeDirectory[] {
   return [
+    // Recyclarr runs as UID/GID 1000 and needs to create its migration state
+    // under /config when the scheduled job starts.
+    { path: "/data/recyclarr", uid: 1000, gid: 1000 },
     { path: "/media/movies", uid: 1000, gid: 1000 },
     { path: "/media/tv", uid: 1000, gid: 1000 },
     { path: "/media/music", uid: 1000, gid: 1000 },

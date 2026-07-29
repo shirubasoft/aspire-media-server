@@ -8,6 +8,7 @@ import {
 
 void test("runtime media and download directories belong to the service user", () => {
   assert.deepEqual(runtimeDirectoryPlan(), [
+    { path: "/data/recyclarr", uid: 1000, gid: 1000 },
     { path: "/media/movies", uid: 1000, gid: 1000 },
     { path: "/media/tv", uid: 1000, gid: 1000 },
     { path: "/media/music", uid: 1000, gid: 1000 },

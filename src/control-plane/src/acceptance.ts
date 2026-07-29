@@ -62,6 +62,16 @@ async function verifyBootstrapFiles(): Promise<void> {
     "Recyclarr configuration is incomplete",
   );
 
+  const ingress = await readFile(
+    "/data/traefik/dynamic/services.yml",
+    "utf8",
+  );
+  ensure(
+    ingress.includes("Host(`aspire.") &&
+      ingress.includes("http://arrspire-dashboard:18888"),
+    "Aspire dashboard is not protected by the application ingress",
+  );
+
   const pluginDirectories = await readdir("/data/jellyfin/plugins");
   for (const plugin of [
     "Bazarr_",

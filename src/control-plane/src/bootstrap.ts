@@ -127,6 +127,13 @@ interface RoutedService {
 
 function routedServices(): Readonly<Record<string, RoutedService>> {
   return {
+    aspire: {
+      url: optional(
+        "ASPIRE_DASHBOARD_URL",
+        "http://arrspire-dashboard:18888",
+      ),
+      requiresIngressAuthentication: true,
+    },
     bazarr: {
       url: required("BAZARR_URL"),
       requiresIngressAuthentication: true,
@@ -178,7 +185,7 @@ function routedServices(): Readonly<Record<string, RoutedService>> {
   };
 }
 
-function traefikDynamicConfiguration(
+export function traefikDynamicConfiguration(
   domain: string,
   services: Readonly<Record<string, RoutedService>>,
   ingressUser: string,

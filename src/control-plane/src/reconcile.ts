@@ -158,7 +158,7 @@ async function reconcileCore(results: ReconciliationResult[]): Promise<void> {
   await runRequiredStage(results, [
     {
       name: "qbittorrent",
-      operation: () => qbittorrent.reconcile(urls.gluetunProxy),
+      operation: () => qbittorrent.reconcile(),
     },
     {
       name: "jellyfin",

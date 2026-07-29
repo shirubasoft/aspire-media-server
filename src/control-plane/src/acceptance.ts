@@ -130,18 +130,17 @@ async function verifyQBittorrent(baseUrl: string): Promise<void> {
       { headers },
     ),
   ]);
-  const proxy = new URL(endpoint("gluetun_proxy"));
   ensure(
-    preferences.proxy_type === "HTTP",
-    "qBittorrent HTTP proxy is disabled",
+    preferences.proxy_type === "None",
+    "qBittorrent has a redundant application proxy despite VPN networking",
   );
   ensure(
-    preferences.proxy_ip === proxy.hostname,
-    "qBittorrent proxy host does not target Gluetun",
+    preferences.proxy_peer_connections === false,
+    "qBittorrent peer traffic is still forced through an HTTP proxy",
   );
   ensure(
-    Number(preferences.proxy_port) === Number(proxy.port || 8888),
-    "qBittorrent proxy port does not target Gluetun",
+    preferences.proxy_bittorrent === false,
+    "qBittorrent tracker traffic is still forced through an HTTP proxy",
   );
   for (const [name, path] of Object.entries({
     sonarr: "/tv",

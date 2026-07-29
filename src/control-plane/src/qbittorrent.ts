@@ -13,9 +13,9 @@ export class QBittorrentClient {
     private readonly password: string,
   ) {}
 
-  async reconcile(proxyUrl: string): Promise<void> {
+  async reconcile(): Promise<void> {
     await this.login();
-    await this.reconcilePreferences(proxyUrl);
+    await this.reconcilePreferences();
     await this.reconcileCategories();
   }
 
@@ -48,12 +48,11 @@ export class QBittorrentClient {
     };
   }
 
-  private async reconcilePreferences(proxyUrl: string): Promise<void> {
+  private async reconcilePreferences(): Promise<void> {
     const current = await json<Preferences>(
       `${this.baseUrl}/api/v2/app/preferences`,
       { headers: this.headers() },
     );
-    const proxy = new URL(proxyUrl);
     const desired: Readonly<Record<string, unknown>> = {
       max_connec: 500,
       max_connec_per_torrent: 100,
@@ -83,15 +82,15 @@ export class QBittorrentClient {
       temp_path: "/downloads/incomplete",
       // qBittorrent 5.2 exposes this enum as a string. Numeric value 3 was
       // accepted by older releases but is now normalized back to "None".
-      proxy_type: "HTTP",
-      proxy_ip: proxy.hostname,
-      proxy_port: Number(proxy.port || 8888),
+      // qBittorrent already shares Gluetun's network namespace. An additional
+      // HTTP proxy prevents UDP trackers and direct peer traffic from working.
+      proxy_type: "None",
       proxy_auth_enabled: false,
-      proxy_peer_connections: true,
-      proxy_hostname_lookup: true,
-      proxy_bittorrent: true,
-      proxy_misc: true,
-      proxy_rss: true,
+      proxy_peer_connections: false,
+      proxy_hostname_lookup: false,
+      proxy_bittorrent: false,
+      proxy_misc: false,
+      proxy_rss: false,
     };
 
     const changes = Object.fromEntries(

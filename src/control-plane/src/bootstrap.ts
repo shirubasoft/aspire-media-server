@@ -251,6 +251,9 @@ export async function bootstrap(): Promise<void> {
     mkdir("/media/tv", { recursive: true }),
     mkdir("/media/music", { recursive: true }),
     mkdir("/downloads/incomplete", { recursive: true }),
+    mkdir("/downloads/sonarr", { recursive: true }),
+    mkdir("/downloads/radarr", { recursive: true }),
+    mkdir("/downloads/lidarr", { recursive: true }),
   ]);
   await installJellyfinPlugins();
 

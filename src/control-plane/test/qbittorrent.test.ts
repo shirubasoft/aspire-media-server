@@ -6,6 +6,7 @@ import { QBittorrentClient } from "../src/qbittorrent.js";
 
 void test("disables the redundant HTTP proxy for a VPN-networked qBittorrent", async (context) => {
   let changedPreferences: Record<string, unknown> | undefined;
+  const changedCategories: Record<string, string> = {};
   const server = createServer((request, response) => {
     const chunks: Buffer[] = [];
     request.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -43,6 +44,14 @@ void test("disables the redundant HTTP proxy for a VPN-networked qBittorrent", a
         assert.ok(encoded);
         changedPreferences = JSON.parse(encoded) as Record<string, unknown>;
         response.end();
+      } else if (path === "/api/v2/torrents/editCategory") {
+        const form = new URLSearchParams(body);
+        const category = form.get("category");
+        const savePath = form.get("savePath");
+        assert.ok(category);
+        assert.ok(savePath);
+        changedCategories[category] = savePath;
+        response.end();
       } else {
         response.statusCode = 404;
         response.end();
@@ -68,4 +77,9 @@ void test("disables the redundant HTTP proxy for a VPN-networked qBittorrent", a
   assert.equal(changedPreferences?.proxy_bittorrent, false);
   assert.equal(changedPreferences?.proxy_misc, false);
   assert.equal(changedPreferences?.proxy_rss, false);
+  assert.deepEqual(changedCategories, {
+    sonarr: "/downloads/sonarr",
+    radarr: "/downloads/radarr",
+    lidarr: "/downloads/lidarr",
+  });
 });

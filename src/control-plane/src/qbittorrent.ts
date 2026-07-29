@@ -112,9 +112,9 @@ export class QBittorrentClient {
 
   private async reconcileCategories(): Promise<void> {
     const desired = {
-      sonarr: "/tv",
-      radarr: "/movies",
-      lidarr: "/music",
+      sonarr: "/downloads/sonarr",
+      radarr: "/downloads/radarr",
+      lidarr: "/downloads/lidarr",
     } as const;
     const current = await json<Categories>(
       `${this.baseUrl}/api/v2/torrents/categories`,

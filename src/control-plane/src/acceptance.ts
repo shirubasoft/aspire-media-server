@@ -143,9 +143,9 @@ async function verifyQBittorrent(baseUrl: string): Promise<void> {
     "qBittorrent tracker traffic is still forced through an HTTP proxy",
   );
   for (const [name, path] of Object.entries({
-    sonarr: "/tv",
-    radarr: "/movies",
-    lidarr: "/music",
+    sonarr: "/downloads/sonarr",
+    radarr: "/downloads/radarr",
+    lidarr: "/downloads/lidarr",
   })) {
     ensure(
       categories[name]?.savePath === path,

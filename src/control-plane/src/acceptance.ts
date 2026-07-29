@@ -6,9 +6,10 @@ import {
   readBazarrApiKey,
   readSeerrApiKey,
 } from "./api-key.js";
-import { required } from "./environment.js";
+import { integer, required } from "./environment.js";
 import { form, json, request } from "./http.js";
 import { log } from "./log.js";
+import { publicServiceUrl } from "./public-url.js";
 
 type JsonObject = Record<string, unknown>;
 
@@ -406,12 +407,16 @@ async function verifySeerr(apiKey: string): Promise<void> {
         readonly animeSeriesType?: string;
         readonly activeAnimeProfileName?: string;
         readonly activeAnimeDirectory?: string;
+        readonly externalUrl?: string;
       }>
     >(
       `${baseUrl}/api/v1/settings/sonarr`,
       { headers },
     ),
-    json<Array<{ readonly isDefault?: boolean }>>(
+    json<Array<{
+      readonly isDefault?: boolean;
+      readonly externalUrl?: string;
+    }>>(
       `${baseUrl}/api/v1/settings/radarr`,
       { headers },
     ),
@@ -428,6 +433,17 @@ async function verifySeerr(apiKey: string): Promise<void> {
     sonarr.some((service) => service.isDefault),
     "Seerr has no default Sonarr",
   );
+  const domain = required("TRAEFIK_DOMAIN");
+  const ingressHttpsPort = integer("INGRESS_HTTPS_PORT", 443);
+  ensure(
+    sonarr.some(
+      (service) =>
+        service.isDefault &&
+        service.externalUrl ===
+          publicServiceUrl("sonarr", domain, ingressHttpsPort),
+    ),
+    "Seerr Sonarr external URL is not reconciled",
+  );
   ensure(
     sonarr.some(
       (service) =>
@@ -441,6 +457,15 @@ async function verifySeerr(apiKey: string): Promise<void> {
   ensure(
     radarr.some((service) => service.isDefault),
     "Seerr has no default Radarr",
+  );
+  ensure(
+    radarr.some(
+      (service) =>
+        service.isDefault &&
+        service.externalUrl ===
+          publicServiceUrl("radarr", domain, ingressHttpsPort),
+    ),
+    "Seerr Radarr external URL is not reconciled",
   );
   const authentication = await request(
     `${baseUrl}/api/v1/auth/jellyfin`,

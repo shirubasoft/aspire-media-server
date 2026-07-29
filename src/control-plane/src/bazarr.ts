@@ -20,6 +20,10 @@ interface ProviderCredentials {
   readonly legendasNetPassword: string;
 }
 
+export function bazarrLanguageCode(language: string): string {
+  return language.toLowerCase() === "pt-br" ? "pb" : language;
+}
+
 export class BazarrClient {
   constructor(
     private readonly baseUrl: string,
@@ -36,13 +40,16 @@ export class BazarrClient {
   ): Promise<void> {
     await this.reconcileArr("sonarr", sonarrUrl, sonarrApiKey);
     await this.reconcileArr("radarr", radarrUrl, radarrApiKey);
-    const profileId = await this.reconcileLanguageProfile(languages);
+    const bazarrLanguages = languages.map(bazarrLanguageCode);
+    const profileId = await this.reconcileLanguageProfile(bazarrLanguages);
     await this.postSettings({
       "settings-general-serie_default_enabled": "true",
-      "settings-general-serie_default_language": JSON.stringify(languages),
+      "settings-general-serie_default_language":
+        JSON.stringify(bazarrLanguages),
       "settings-general-serie_default_profile": String(profileId),
       "settings-general-movie_default_enabled": "true",
-      "settings-general-movie_default_language": JSON.stringify(languages),
+      "settings-general-movie_default_language":
+        JSON.stringify(bazarrLanguages),
       "settings-general-movie_default_profile": String(profileId),
       "settings-sonarr-minimum_score": "90",
       "settings-radarr-minimum_score": "80",

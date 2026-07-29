@@ -2,6 +2,7 @@ import type {
   ContainerResourcePromise,
   EndpointReferencePromise,
 } from "../../.aspire/modules/aspire.mjs";
+import { resolveIngressPorts } from "../ingress.mjs";
 import type {
   ArrspireResourcePromise,
   ResourceContext,
@@ -49,6 +50,22 @@ export function withEndpointEnvironment(
   }
 
   return configured;
+}
+
+export function withPublicIngressEnvironment(
+  resource: ContainerResourcePromise,
+  context: ResourceContext,
+): ContainerResourcePromise {
+  const ingressPorts = resolveIngressPorts(context.paths.rootlessPodman);
+  return resource
+    .withEnvironment(
+      "TRAEFIK_DOMAIN",
+      context.parameters.traefikDomain,
+    )
+    .withEnvironment(
+      "INGRESS_HTTPS_PORT",
+      String(ingressPorts.https),
+    );
 }
 
 export function waitForResources(

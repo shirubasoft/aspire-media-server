@@ -16,6 +16,7 @@ import { waitForHttp } from "./http.js";
 import { JellyfinClient } from "./jellyfin.js";
 import { log } from "./log.js";
 import { ProwlarrClient } from "./prowlarr.js";
+import { publicServiceUrl } from "./public-url.js";
 import { QBittorrentClient } from "./qbittorrent.js";
 import { reconcileRecyclarr } from "./recyclarr.js";
 import { SeerrClient } from "./seerr.js";
@@ -126,6 +127,12 @@ async function reconcileCore(results: ReconciliationResult[]): Promise<void> {
   const qbittorrentPassword = required("QBITTORRENT_PASSWORD");
   const minimumSeeders = integer("MINIMUM_SEEDERS", 1);
   const useOriginalTitle = boolean("USE_ORIGINAL_TITLE", false);
+  const domain = required("TRAEFIK_DOMAIN");
+  const ingressHttpsPort = integer("INGRESS_HTTPS_PORT", 443);
+  const externalUrls = {
+    sonarr: publicServiceUrl("sonarr", domain, ingressHttpsPort),
+    radarr: publicServiceUrl("radarr", domain, ingressHttpsPort),
+  };
   const languages = required("SUBTITLE_LANGUAGES")
     .split(",")
     .map((language) => language.trim())
@@ -312,6 +319,7 @@ async function reconcileCore(results: ReconciliationResult[]): Promise<void> {
           sonarrKey,
           urls.radarr,
           radarrKey,
+          externalUrls,
         ),
     },
     {

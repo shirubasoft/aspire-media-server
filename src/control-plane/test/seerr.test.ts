@@ -71,6 +71,10 @@ void test("repairs initialized Seerr service endpoints", async (context) => {
     "sonarr-api-key",
     `${baseUrl}/radarr`,
     "radarr-api-key",
+    {
+      sonarr: "https://sonarr.example.test:9443",
+      radarr: "https://radarr.example.test:9443",
+    },
   );
 
   const jellyfinUpdate = requests.find(
@@ -95,7 +99,9 @@ void test("repairs initialized Seerr service endpoints", async (context) => {
         request.body.animeSeriesType === "anime" &&
         request.body.activeAnimeProfileId === 7 &&
         request.body.activeAnimeProfileName === "[Anime] Remux-1080p" &&
-        request.body.activeAnimeDirectory === "/tv",
+        request.body.activeAnimeDirectory === "/tv" &&
+        request.body.externalUrl ===
+          "https://sonarr.example.test:9443",
     ),
   );
   assert.ok(
@@ -103,7 +109,9 @@ void test("repairs initialized Seerr service endpoints", async (context) => {
       (request) =>
         request.method === "PUT" &&
         request.path === "/api/v1/settings/radarr/22" &&
-        request.body.hostname === "127.0.0.1",
+        request.body.hostname === "127.0.0.1" &&
+        request.body.externalUrl ===
+          "https://radarr.example.test:9443",
     ),
   );
 });

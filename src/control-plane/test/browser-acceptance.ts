@@ -283,6 +283,18 @@ async function verifySeerr(
       }),
     ),
   );
+  for (const service of ["sonarr", "radarr"] as const) {
+    const name = service === "sonarr" ? "Sonarr" : "Radarr";
+    const publicLink = page.getByRole("link", { name, exact: true });
+    await publicLink.waitFor({ state: "visible", timeout: 30_000 });
+    assert.equal(
+      await publicLink.getAttribute("href"),
+      new URL(
+        serviceUrl(options.ingressUrl, options.domain, service),
+      ).origin,
+      `${name} does not link to its public ingress URL`,
+    );
+  }
   await page.close();
 }
 

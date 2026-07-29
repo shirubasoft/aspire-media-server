@@ -21,6 +21,14 @@ and a publicly trusted certificate. Do not forward ports 80/443 from an
 untrusted network without reviewing every routed application's authentication,
 rate limits, and patch level.
 
+For local browser use, `npm run tls:local` creates a stable CA and wildcard
+certificate for the configured Traefik domain, configures Traefik to use it,
+and installs only the CA certificate in the current user's NSS browser trust
+database. Restart browsers once after first use. The CA private key remains
+mode `0600` under ignored runtime data. Remove the trust entry with
+`certutil -D -d sql:$HOME/.pki/nssdb -n "Arrspire Local CA"` when the local
+stack is retired.
+
 Direct service publication is an explicit diagnostic escape hatch:
 
 ```bash

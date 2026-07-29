@@ -92,6 +92,17 @@ npm run status
 npm run repair
 ```
 
+For trusted local-browser HTTPS, generate a stable local certificate and add
+its CA to the current user's browser trust database, then restart the browser:
+
+```bash
+npm run tls:local
+```
+
+The certificate and private CA stay under ignored
+`data/traefik/dynamic/certs/` with restrictive permissions. Do not copy the
+local CA private key to another machine.
+
 Local Aspire users can rerun the completed reconciler with
 `aspire resource reconciler start --non-interactive`; its structured summary
 remains visible in the Aspire dashboard.

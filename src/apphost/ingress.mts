@@ -72,3 +72,7 @@ export function httpsServiceUrl(
 ): string {
   return `https://${service}.${domain}${httpsPort === 443 ? "" : `:${String(httpsPort)}`}`;
 }
+
+export function traefikHttpsRedirectTarget(httpsPort: number): string {
+  return `:${String(port("Traefik HTTPS redirect port", String(httpsPort), 443))}`;
+}

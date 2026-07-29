@@ -6,6 +6,7 @@ import {
   httpsServiceUrl,
   publishedTraefikHttpsPort,
   resolveIngressPorts,
+  traefikHttpsRedirectTarget,
 } from "../ingress.mjs";
 
 void test("uses the server LAN nip.io domain by default", () => {
@@ -24,6 +25,12 @@ void test("rootful runtimes retain standard HTTP and HTTPS ports", () => {
     http: 80,
     https: 443,
   });
+});
+
+void test("Traefik redirects HTTP to the published HTTPS port", () => {
+  assert.equal(traefikHttpsRedirectTarget(443), ":443");
+  assert.equal(traefikHttpsRedirectTarget(8443), ":8443");
+  assert.equal(traefikHttpsRedirectTarget(9443), ":9443");
 });
 
 void test("explicit ingress port overrides are validated", () => {

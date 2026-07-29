@@ -21,6 +21,9 @@ export interface ArrspireParameters {
   readonly useOriginalTitle: ParameterResourcePromise;
   readonly minimumSeeders: ParameterResourcePromise;
   readonly traefikDomain: ParameterResourcePromise;
+  readonly traefikTlsMode: ParameterResourcePromise;
+  readonly traefikAcmeEmail: ParameterResourcePromise;
+  readonly cloudflareDnsApiToken: ParameterResourcePromise;
   readonly ingressAdminUser: ParameterResourcePromise;
   readonly ingressAdminPassword: ParameterResourcePromise;
   readonly opensubtitlesComUser: ParameterResourcePromise;
@@ -44,27 +47,36 @@ const generatedSecret = {
   minNumeric: 4,
 };
 
+export function parameterValue(
+  name: string,
+  fallback: string,
+  environment: Readonly<NodeJS.ProcessEnv> = process.env,
+): string {
+  const environmentName = `Parameters__${name.replaceAll("-", "_")}`;
+  return environment[environmentName] ?? fallback;
+}
+
 export function addArrspireParameters(
   builder: DistributedApplicationBuilder,
 ): ArrspireParameters {
   return {
     vpnProvider: builder.addParameter("vpn-provider", {
-      value: "protonvpn",
+      value: parameterValue("vpn-provider", "protonvpn"),
       publishValueAsDefault: true,
     }),
     vpnWireguardKey: builder.addParameter("vpn-wireguard-key", {
       secret: true,
     }),
     vpnCountries: builder.addParameter("vpn-countries", {
-      value: "Netherlands",
+      value: parameterValue("vpn-countries", "Netherlands"),
       publishValueAsDefault: true,
     }),
     timezone: builder.addParameter("timezone", {
-      value: "America/Sao_Paulo",
+      value: parameterValue("timezone", "America/Sao_Paulo"),
       publishValueAsDefault: true,
     }),
     jellyfinAdminUser: builder.addParameter("jellyfin-admin-user", {
-      value: "admin",
+      value: parameterValue("jellyfin-admin-user", "admin"),
       publishValueAsDefault: true,
     }),
     jellyfinAdminPassword: builder.addParameterWithGeneratedValue(
@@ -73,11 +85,11 @@ export function addArrspireParameters(
       { secret: true, persist: true },
     ),
     jellyfinServerName: builder.addParameter("jellyfin-server-name", {
-      value: "arrspire",
+      value: parameterValue("jellyfin-server-name", "arrspire"),
       publishValueAsDefault: true,
     }),
     jellyfinLanguage: builder.addParameter("jellyfin-language", {
-      value: "pt-BR",
+      value: parameterValue("jellyfin-language", "pt-BR"),
       publishValueAsDefault: true,
     }),
     qbittorrentPassword: builder.addParameterWithGeneratedValue(
@@ -101,23 +113,38 @@ export function addArrspireParameters(
       { secret: true, persist: true },
     ),
     subtitleLanguages: builder.addParameter("subtitle-languages", {
-      value: "pt-BR",
+      value: parameterValue("subtitle-languages", "pt-BR"),
       publishValueAsDefault: true,
     }),
     useOriginalTitle: builder.addParameter("use-original-title", {
-      value: "false",
+      value: parameterValue("use-original-title", "false"),
       publishValueAsDefault: true,
     }),
     minimumSeeders: builder.addParameter("minimum-seeders", {
-      value: "1",
+      value: parameterValue("minimum-seeders", "1"),
       publishValueAsDefault: true,
     }),
     traefikDomain: builder.addParameter("traefik-domain", {
-      value: defaultTraefikDomain,
+      value: parameterValue("traefik-domain", defaultTraefikDomain),
       publishValueAsDefault: true,
     }),
+    traefikTlsMode: builder.addParameter("traefik-tls-mode", {
+      value: parameterValue("traefik-tls-mode", "local"),
+      publishValueAsDefault: true,
+    }),
+    traefikAcmeEmail: builder.addParameter("traefik-acme-email", {
+      value: parameterValue("traefik-acme-email", ""),
+      publishValueAsDefault: true,
+    }),
+    cloudflareDnsApiToken: builder.addParameter(
+      "cloudflare-dns-api-token",
+      {
+        value: parameterValue("cloudflare-dns-api-token", ""),
+        secret: true,
+      },
+    ),
     ingressAdminUser: builder.addParameter("ingress-admin-user", {
-      value: "admin",
+      value: parameterValue("ingress-admin-user", "admin"),
       publishValueAsDefault: true,
     }),
     ingressAdminPassword: builder.addParameterWithGeneratedValue(
@@ -126,35 +153,41 @@ export function addArrspireParameters(
       { secret: true, persist: true },
     ),
     opensubtitlesComUser: builder.addParameter("opensubtitlescom-user", {
-      value: "",
+      value: parameterValue("opensubtitlescom-user", ""),
       publishValueAsDefault: true,
     }),
     opensubtitlesComPassword: builder.addParameter(
       "opensubtitlescom-password",
-      { value: "", secret: true },
+      {
+        value: parameterValue("opensubtitlescom-password", ""),
+        secret: true,
+      },
     ),
     opensubtitlesOrgUser: builder.addParameter("opensubtitlesorg-user", {
-      value: "",
+      value: parameterValue("opensubtitlesorg-user", ""),
       publishValueAsDefault: true,
     }),
     opensubtitlesOrgPassword: builder.addParameter(
       "opensubtitlesorg-password",
-      { value: "", secret: true },
+      {
+        value: parameterValue("opensubtitlesorg-password", ""),
+        secret: true,
+      },
     ),
     legendasDivxUser: builder.addParameter("legendasdivx-user", {
-      value: "",
+      value: parameterValue("legendasdivx-user", ""),
       publishValueAsDefault: true,
     }),
     legendasDivxPassword: builder.addParameter("legendasdivx-password", {
-      value: "",
+      value: parameterValue("legendasdivx-password", ""),
       secret: true,
     }),
     legendasNetUser: builder.addParameter("legendasnet-user", {
-      value: "",
+      value: parameterValue("legendasnet-user", ""),
       publishValueAsDefault: true,
     }),
     legendasNetPassword: builder.addParameter("legendasnet-password", {
-      value: "",
+      value: parameterValue("legendasnet-password", ""),
       secret: true,
     }),
   };

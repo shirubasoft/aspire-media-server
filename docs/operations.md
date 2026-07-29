@@ -29,6 +29,34 @@ mode `0600` under ignored runtime data. Remove the trust entry with
 `certutil -D -d sql:$HOME/.pki/nssdb -n "Arrspire Local CA"` when the local
 stack is retired.
 
+### Publicly trusted LAN certificates
+
+Set `Parameters__traefik_tls_mode=cloudflare-acme` when a client cannot import
+the Arrspire local CA. Traefik then uses the Cloudflare DNS-01 challenge to
+obtain and renew Let's Encrypt certificates. The server does not need public
+inbound access.
+
+1. Choose a deployment-owned suffix such as `home.example.com`.
+2. In the matching Cloudflare zone, create DNS-only service records or a
+   scoped wildcard record pointing to the server's LAN address.
+3. Create a Cloudflare API token restricted to that zone with `Zone:Read` and
+   `DNS:Edit`.
+4. Supply the following deployment parameters:
+
+   ```text
+   Parameters__traefik_domain=home.example.com
+   Parameters__traefik_tls_mode=cloudflare-acme
+   Parameters__traefik_acme_email=operator@example.com
+   Parameters__cloudflare_dns_api_token=<scoped token>
+   ```
+
+The generated Compose environment passes the token only as
+`CF_DNS_API_TOKEN`; it never appears in Traefik process arguments. ACME state
+persists under `data/traefik/acme/`. Keep Cloudflare proxying disabled for
+private RFC1918 targets and do not forward ingress ports merely to satisfy
+certificate validation. Returning to `local` mode may require rerunning
+`npm run tls:local` for the selected domain.
+
 Direct service publication is an explicit diagnostic escape hatch:
 
 ```bash
@@ -121,6 +149,7 @@ docker run --rm qmcgaw/gluetun@<reviewed-digest> \
 | Secret | Class | Persisted service dependency | Backup requirement |
 | --- | --- | --- | --- |
 | `vpn-wireguard-key` | Required, externally managed | Gluetun tunnel | Back up in a password manager |
+| `cloudflare-dns-api-token` | Required only for `cloudflare-acme` TLS | Traefik DNS-01 renewal | Store in a password manager; scope to `Zone:Read` and `DNS:Edit` for one zone |
 | `ingress-admin-password` | Generated | Traefik administrative routes | Back up with the Aspire store/deployment environment |
 | `jellyfin-admin-password` | Generated | Jellyfin and Jellyseerr setup | Back up with Jellyfin data |
 | `qbittorrent-password` | Generated | qBittorrent and Arr clients | Back up with qBittorrent/Arr data |

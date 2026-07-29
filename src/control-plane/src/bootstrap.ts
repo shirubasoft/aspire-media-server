@@ -8,6 +8,11 @@ import { installJellyfinPlugins } from "./jellyfin-plugins.js";
 import { log } from "./log.js";
 import { reconcileRecyclarr } from "./recyclarr.js";
 import { writeBootstrapStatus } from "./status.js";
+import {
+  resolveTraefikTlsMode,
+  traefikRouterTlsConfiguration,
+  type TraefikTlsMode,
+} from "./traefik-tls.js";
 import { validateConfiguration } from "./validation.js";
 
 const dataDirectories = [
@@ -202,15 +207,17 @@ export function traefikDynamicConfiguration(
   services: Readonly<Record<string, RoutedService>>,
   ingressUser: string,
   ingressPassword: string,
+  tlsMode: TraefikTlsMode = "local",
 ): string {
   const routerLines: string[] = [];
   const serviceLines: string[] = [];
+  const tlsConfiguration = traefikRouterTlsConfiguration(tlsMode);
   for (const [name, service] of Object.entries(services)) {
     routerLines.push(`    ${name}:
       rule: 'Host(\`${name}.${domain}\`)'
       entryPoints: [websecure]
       service: ${name}
-      tls: {}
+${tlsConfiguration}
 ${service.requiresIngressAuthentication ? "      middlewares: [admin-auth]" : ""}`);
     serviceLines.push(`    ${name}:
       loadBalancer:
@@ -222,7 +229,7 @@ ${service.requiresIngressAuthentication ? "      middlewares: [admin-auth]" : ""
       entryPoints: [websecure]
       service: api@internal
       middlewares: [admin-auth]
-      tls: {}`);
+${tlsConfiguration}`);
   const passwordHash = createHash("sha1")
     .update(ingressPassword)
     .digest("base64");
@@ -316,6 +323,7 @@ export async function bootstrap(): Promise<void> {
 
   const services = routedServices();
   const domain = optional("TRAEFIK_DOMAIN", "192.168.0.15.nip.io");
+  const tlsMode = resolveTraefikTlsMode(process.env);
   const ingressUser = required("INGRESS_ADMIN_USER");
   const ingressPassword = required("INGRESS_ADMIN_PASSWORD");
   await Promise.all([
@@ -326,6 +334,7 @@ export async function bootstrap(): Promise<void> {
         services,
         ingressUser,
         ingressPassword,
+        tlsMode,
       ),
       0o644,
     ),

@@ -21,20 +21,50 @@ export function addTraefik(
   const ingressPorts = resolveIngressPorts(context.paths.rootlessPodman);
   const resource = context.builder
     .addContainer("traefik", images.traefik)
-    .withArgs([
-      "--api.dashboard=true",
-      "--api.insecure=false",
-      "--ping=true",
-      "--entrypoints.web.address=:80",
-      "--entrypoints.websecure.address=:443",
-      "--entrypoints.web.http.redirections.entrypoint.to=websecure",
-      "--entrypoints.web.http.redirections.entrypoint.scheme=https",
-      "--providers.file.directory=/etc/traefik/dynamic",
-      "--providers.file.watch=true",
-      "--accesslog=true",
-      "--accesslog.filepath=/var/log/traefik/access.log",
-      "--accesslog.format=common",
-    ])
+    .withEnvironment("TRAEFIK_API_DASHBOARD", "true")
+    .withEnvironment("TRAEFIK_API_INSECURE", "false")
+    .withEnvironment("TRAEFIK_PING", "true")
+    .withEnvironment("TRAEFIK_ENTRYPOINTS_WEB_ADDRESS", ":80")
+    .withEnvironment("TRAEFIK_ENTRYPOINTS_WEBSECURE_ADDRESS", ":443")
+    .withEnvironment(
+      "TRAEFIK_ENTRYPOINTS_WEB_HTTP_REDIRECTIONS_ENTRYPOINT_TO",
+      "websecure",
+    )
+    .withEnvironment(
+      "TRAEFIK_ENTRYPOINTS_WEB_HTTP_REDIRECTIONS_ENTRYPOINT_SCHEME",
+      "https",
+    )
+    .withEnvironment(
+      "TRAEFIK_PROVIDERS_FILE_DIRECTORY",
+      "/etc/traefik/dynamic",
+    )
+    .withEnvironment("TRAEFIK_PROVIDERS_FILE_WATCH", "true")
+    .withEnvironment("TRAEFIK_ACCESSLOG", "true")
+    .withEnvironment(
+      "TRAEFIK_ACCESSLOG_FILEPATH",
+      "/var/log/traefik/access.log",
+    )
+    .withEnvironment("TRAEFIK_ACCESSLOG_FORMAT", "common")
+    .withEnvironment(
+      "TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_EMAIL",
+      context.parameters.traefikAcmeEmail,
+    )
+    .withEnvironment(
+      "TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_STORAGE",
+      "/acme/acme.json",
+    )
+    .withEnvironment(
+      "TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_DNSCHALLENGE",
+      "true",
+    )
+    .withEnvironment(
+      "TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_DNSCHALLENGE_PROVIDER",
+      "cloudflare",
+    )
+    .withEnvironment(
+      "CF_DNS_API_TOKEN",
+      context.parameters.cloudflareDnsApiToken,
+    )
     .withBindMount(
       join(context.paths.data, "traefik", "dynamic"),
       "/etc/traefik/dynamic",

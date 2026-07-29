@@ -1,3 +1,5 @@
+import { validateTraefikTlsConfiguration } from "./traefik-tls.js";
+
 export interface LocaleProfile {
   readonly timezone: string;
   readonly jellyfinLanguage: string;
@@ -163,6 +165,7 @@ export function validateConfiguration(environment: NodeJS.ProcessEnv): void {
       `TRAEFIK_DOMAIN must be localhost or a fully qualified lowercase domain; received ${domain}`,
     );
   }
+  validateTraefikTlsConfiguration(environment, domain);
   if (
     !/^[A-Za-z0-9._-]{1,64}$/u.test(
       requireValue(environment, "INGRESS_ADMIN_USER"),

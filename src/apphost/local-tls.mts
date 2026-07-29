@@ -52,7 +52,9 @@ function validateDomain(domain: string): void {
 function opensslConfiguration(domain: string): string {
   const serviceHostnames = [
     "jellyfin",
+    // Retain the legacy hostname while bookmarks migrate to Seerr.
     "jellyseerr",
+    "seerr",
     "sonarr",
     "radarr",
     "lidarr",

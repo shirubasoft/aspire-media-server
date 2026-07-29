@@ -12,7 +12,7 @@ interface ArrSummary {
   readonly path?: string;
 }
 
-export class JellyseerrClient {
+export class SeerrClient {
   private cookie = "";
 
   constructor(
@@ -42,9 +42,9 @@ export class JellyseerrClient {
         method: "POST",
         headers: this.headers(),
       });
-      log.info("Jellyseerr initialization completed");
+      log.info("Seerr initialization completed");
     } else {
-      log.info("Jellyseerr existing configuration repaired");
+      log.info("Seerr existing configuration repaired");
     }
   }
 
@@ -76,7 +76,7 @@ export class JellyseerrClient {
         externalHostname: "",
       }),
     });
-    log.info("Jellyseerr Jellyfin service reconciled");
+    log.info("Seerr Jellyfin service reconciled");
   }
 
   private async authenticate(): Promise<void> {
@@ -117,14 +117,14 @@ export class JellyseerrClient {
       ) {
         throw error;
       }
-      // Jellyseerr persists its media-server settings before the setup
+      // Seerr persists its media-server settings before the setup
       // wizard is marked initialized. Resume a partially completed setup by
       // authenticating against that stored server instead of resending it.
       response = await authenticate(false);
     }
     this.cookie = response.headers.get("set-cookie")?.split(";")[0] ?? "";
     if (!this.cookie) {
-      throw new Error("Jellyseerr did not return an authentication cookie");
+      throw new Error("Seerr did not return an authentication cookie");
     }
   }
 
@@ -188,6 +188,6 @@ export class JellyseerrClient {
       body: JSON.stringify(payload),
       },
     );
-    log.info("Jellyseerr service reconciled", { service: kind });
+    log.info("Seerr service reconciled", { service: kind });
   }
 }

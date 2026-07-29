@@ -4,7 +4,7 @@ import { request as httpsRequest } from "node:https";
 import {
   readArrApiKey,
   readBazarrApiKey,
-  readJellyseerrApiKey,
+  readSeerrApiKey,
 } from "./api-key.js";
 import { required } from "./environment.js";
 import { form, json, request } from "./http.js";
@@ -374,8 +374,8 @@ async function verifyJellyfin(): Promise<void> {
   );
 }
 
-async function verifyJellyseerr(apiKey: string): Promise<void> {
-  const baseUrl = endpoint("jellyseerr");
+async function verifySeerr(apiKey: string): Promise<void> {
+  const baseUrl = endpoint("seerr");
   const headers = apiHeaders(apiKey);
   const [publicSettings, jellyfinSettings, sonarr, radarr] = await Promise.all([
     json<{ readonly initialized?: boolean }>(
@@ -406,17 +406,17 @@ async function verifyJellyseerr(apiKey: string): Promise<void> {
       { headers },
     ),
   ]);
-  ensure(publicSettings.initialized, "Jellyseerr is not initialized");
+  ensure(publicSettings.initialized, "Seerr is not initialized");
   const jellyfinUrl = new URL(endpoint("jellyfin"));
   ensure(
     jellyfinSettings.ip === jellyfinUrl.hostname &&
       jellyfinSettings.port === Number(jellyfinUrl.port || 8096) &&
       jellyfinSettings.useSsl === (jellyfinUrl.protocol === "https:"),
-    "Jellyseerr Jellyfin endpoint is not reconciled",
+    "Seerr Jellyfin endpoint is not reconciled",
   );
   ensure(
     sonarr.some((service) => service.isDefault),
-    "Jellyseerr has no default Sonarr",
+    "Seerr has no default Sonarr",
   );
   ensure(
     sonarr.some(
@@ -426,11 +426,11 @@ async function verifyJellyseerr(apiKey: string): Promise<void> {
         service.activeAnimeProfileName === "[Anime] Remux-1080p" &&
         service.activeAnimeDirectory === "/tv",
     ),
-    "Jellyseerr does not use the anime Blu-ray profile for anime requests",
+    "Seerr does not use the anime Blu-ray profile for anime requests",
   );
   ensure(
     radarr.some((service) => service.isDefault),
-    "Jellyseerr has no default Radarr",
+    "Seerr has no default Radarr",
   );
   const authentication = await request(
     `${baseUrl}/api/v1/auth/jellyfin`,
@@ -445,20 +445,20 @@ async function verifyJellyseerr(apiKey: string): Promise<void> {
   );
   ensure(
     authentication.headers.get("set-cookie"),
-    "Jellyseerr could not authenticate through its configured Jellyfin server",
+    "Seerr could not authenticate through its configured Jellyfin server",
   );
 }
 
 export async function verifyAcceptance(): Promise<void> {
   log.info("Starting real-stack acceptance checks");
-  const [sonarrKey, radarrKey, lidarrKey, prowlarrKey, bazarrKey, jellyseerrKey] =
+  const [sonarrKey, radarrKey, lidarrKey, prowlarrKey, bazarrKey, seerrKey] =
     await Promise.all([
       readArrApiKey("sonarr"),
       readArrApiKey("radarr"),
       readArrApiKey("lidarr"),
       readArrApiKey("prowlarr"),
       readBazarrApiKey(),
-      readJellyseerrApiKey(),
+      readSeerrApiKey(),
     ]);
 
   await Promise.all([
@@ -471,7 +471,7 @@ export async function verifyAcceptance(): Promise<void> {
     verifyProwlarr(prowlarrKey),
     verifyBazarr(bazarrKey),
     verifyJellyfin(),
-    verifyJellyseerr(jellyseerrKey),
+    verifySeerr(seerrKey),
   ]);
   log.info("All real-stack acceptance checks passed");
 }

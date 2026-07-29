@@ -305,7 +305,7 @@ async function removeTestRoot(root: string): Promise<void> {
             "--rm",
             "--volume",
             `${join(root, "data")}:/cleanup`,
-            "alpine:3.22",
+            "alpine:3.24",
             "chmod",
             "-R",
             "a+rwx",

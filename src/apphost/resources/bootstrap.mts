@@ -26,6 +26,18 @@ export function addBootstrap(
         context.parameters.traefikDomain,
       )
       .withEnvironment(
+        "TRAEFIK_TLS_MODE",
+        context.parameters.traefikTlsMode,
+      )
+      .withEnvironment(
+        "TRAEFIK_ACME_EMAIL",
+        context.parameters.traefikAcmeEmail,
+      )
+      .withEnvironment(
+        "CF_DNS_API_TOKEN",
+        context.parameters.cloudflareDnsApiToken,
+      )
+      .withEnvironment(
         "INGRESS_ADMIN_USER",
         context.parameters.ingressAdminUser,
       )

@@ -10,10 +10,7 @@ export { addFail2ban, type Fail2banResource } from "./fail2ban.mjs";
 export { addGluetun, type GluetunResource } from "./gluetun.mjs";
 export { addGrafana, type GrafanaResource } from "./grafana.mjs";
 export { addJellyfin, type JellyfinResource } from "./jellyfin.mjs";
-export {
-  addJellyseerr,
-  type JellyseerrResource,
-} from "./jellyseerr.mjs";
+export { addSeerr, type SeerrResource } from "./seerr.mjs";
 export { addLidarr, type LidarrResource } from "./lidarr.mjs";
 export {
   addPrometheus,
@@ -35,6 +32,7 @@ export {
 } from "./recyclarr.mjs";
 export {
   type ResourceContext,
+  withComposeInit,
   withComposeRestart,
 } from "./resource.mjs";
 export { addSonarr, type SonarrResource } from "./sonarr.mjs";

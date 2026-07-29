@@ -12,6 +12,7 @@ void test("runtime media and download directories belong to the service user", (
     { path: "/data/grafana", uid: 472, gid: 0 },
     { path: "/data/prometheus", uid: 65_534, gid: 65_534 },
     { path: "/data/recyclarr", uid: 1000, gid: 1000 },
+    { path: "/data/jellyseerr", uid: 1000, gid: 1000 },
     { path: "/media/movies", uid: 1000, gid: 1000 },
     { path: "/media/tv", uid: 1000, gid: 1000 },
     { path: "/media/music", uid: 1000, gid: 1000 },
@@ -45,6 +46,32 @@ void test("protects and routes the network-only Aspire dashboard", () => {
     configuration,
     /url: "http:\/\/arrspire-dashboard:18888"/u,
   );
+  assert.match(configuration, /tls: \{\}/u);
+  assert.doesNotMatch(configuration, /certResolver/u);
+});
+
+void test("uses the ACME resolver only when public TLS is enabled", () => {
+  const configuration = traefikDynamicConfiguration(
+    "home.example.com",
+    {
+      jellyfin: {
+        url: "http://jellyfin:8096",
+        requiresIngressAuthentication: false,
+      },
+    },
+    "operator",
+    "secret",
+    "cloudflare-acme",
+  );
+
+  assert.match(
+    configuration,
+    /jellyfin:\n[\s\S]*?tls:\n        certResolver: letsencrypt/u,
+  );
+  assert.match(
+    configuration,
+    /traefik-dashboard:\n[\s\S]*?tls:\n        certResolver: letsencrypt/u,
+  );
 });
 
 void test("lets Duplicati use its own Bearer authentication", () => {
@@ -69,6 +96,27 @@ void test("lets Duplicati use its own Bearer authentication", () => {
   );
   assert.ok(router?.groups?.configuration);
   assert.doesNotMatch(router.groups.configuration, /admin-auth/u);
+});
+
+void test("keeps the legacy Jellyseerr hostname as a Seerr alias", () => {
+  const configuration = traefikDynamicConfiguration(
+    "localhost",
+    {
+      seerr: {
+        url: "http://seerr:5055",
+        requiresIngressAuthentication: false,
+        aliases: ["jellyseerr"],
+      },
+    },
+    "operator",
+    "secret",
+  );
+
+  assert.match(
+    configuration,
+    /rule: 'Host\(`seerr\.localhost`\) \|\| Host\(`jellyseerr\.localhost`\)'/u,
+  );
+  assert.match(configuration, /url: "http:\/\/seerr:5055"/u);
 });
 
 void test("does not ban browser clients for ordinary missing routes", () => {

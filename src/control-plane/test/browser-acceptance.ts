@@ -244,7 +244,7 @@ async function verifyDuplicati(
   await page.close();
 }
 
-async function verifyJellyseerr(
+async function verifySeerr(
   context: BrowserContext,
   options: BrowserAcceptanceOptions,
 ): Promise<void> {
@@ -252,7 +252,7 @@ async function verifyJellyseerr(
   const baseUrl = serviceUrl(
     options.ingressUrl,
     options.domain,
-    "jellyseerr",
+    "seerr",
   );
   await gotoAvailable(page, baseUrl);
   await page.locator("#username").fill(options.jellyfinUsername);
@@ -262,10 +262,10 @@ async function verifyJellyseerr(
     state: "hidden",
     timeout: 30_000,
   });
-  assert.ok(
-    (await page.title()).includes("Discover"),
-    "Jellyseerr could not log in through Jellyfin",
-  );
+  await page.getByText("Discover", { exact: true }).first().waitFor({
+    state: "visible",
+    timeout: 30_000,
+  });
   await page.goto(new URL("/settings/services", baseUrl).toString(), {
     waitUntil: "domcontentloaded",
     timeout: 60_000,
@@ -350,7 +350,7 @@ export async function verifyBrowserAcceptance(
       ignoreHTTPSErrors: true,
     });
     await verifyJellyfin(serviceContext, options);
-    await verifyJellyseerr(serviceContext, options);
+    await verifySeerr(serviceContext, options);
     await verifyDuplicati(serviceContext, options);
     await serviceContext.close();
   } finally {

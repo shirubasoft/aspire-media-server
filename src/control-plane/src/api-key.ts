@@ -33,7 +33,9 @@ export async function readBazarrApiKey(): Promise<string> {
   throw new Error(`Bazarr API key did not become available: ${String(lastError)}`);
 }
 
-export async function readJellyseerrApiKey(): Promise<string> {
+export async function readSeerrApiKey(): Promise<string> {
+  // Seerr migrates Jellyseerr in place, so the host data directory remains
+  // stable even though the running resource and public hostname are renamed.
   const path = "/data/jellyseerr/settings.json";
   const settings = JSON.parse(await readFile(path, "utf8")) as {
     readonly main?: { readonly apiKey?: unknown };

@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import test from "node:test";
 
-import { JellyseerrClient } from "../src/jellyseerr.js";
+import { SeerrClient } from "../src/seerr.js";
 
-void test("repairs initialized Jellyseerr service endpoints", async (context) => {
+void test("repairs initialized Seerr service endpoints", async (context) => {
   const requests: Array<{
     readonly method: string;
     readonly path: string;
@@ -58,12 +58,12 @@ void test("repairs initialized Jellyseerr service endpoints", async (context) =>
   const address = server.address();
   assert.ok(address && typeof address === "object");
   const baseUrl = `http://127.0.0.1:${String(address.port)}`;
-  const client = new JellyseerrClient(
+  const client = new SeerrClient(
     baseUrl,
     "http://jellyfin:8096",
     "admin",
     "secret",
-    "jellyseerr-api-key",
+    "seerr-api-key",
   );
 
   await client.reconcile(
@@ -78,7 +78,7 @@ void test("repairs initialized Jellyseerr service endpoints", async (context) =>
       request.method === "POST" &&
       request.path === "/api/v1/settings/jellyfin",
   );
-  assert.equal(jellyfinUpdate?.apiKey, "jellyseerr-api-key");
+  assert.equal(jellyfinUpdate?.apiKey, "seerr-api-key");
   assert.deepEqual(jellyfinUpdate?.body, {
     ip: "jellyfin",
     port: 8096,

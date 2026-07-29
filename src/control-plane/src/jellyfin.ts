@@ -35,8 +35,8 @@ interface ScheduledTask {
 export interface JellyfinIntegrations {
   readonly bazarrUrl: string;
   readonly bazarrApiKey: string;
-  readonly jellyseerrUrl: string;
-  readonly jellyseerrApiKey: string;
+  readonly seerrUrl: string;
+  readonly seerrApiKey: string;
   readonly sonarrUrl: string;
   readonly sonarrApiKey: string;
   readonly radarrUrl: string;
@@ -262,9 +262,11 @@ export class JellyfinClient {
       plugins,
       (name) => name.toLowerCase().includes("enhanced"),
       {
+        // Jellyfin Enhanced retains these configuration property names while
+        // presenting the integration as Seerr in its current UI.
         JellyseerrEnabled: true,
-        JellyseerrUrls: integrations.jellyseerrUrl.replace(/\/$/u, ""),
-        JellyseerrApiKey: integrations.jellyseerrApiKey,
+        JellyseerrUrls: integrations.seerrUrl.replace(/\/$/u, ""),
+        JellyseerrApiKey: integrations.seerrApiKey,
         JellyseerrShowRecommended: true,
         JellyseerrShowSimilar: true,
         JellyseerrExcludeLibraryItems: true,

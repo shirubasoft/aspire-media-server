@@ -52,8 +52,8 @@ assert.deepEqual(
   [`${String(ingressPorts.http)}:80`, `${String(ingressPorts.https)}:443`],
   "Traefik must publish the expected HTTP and HTTPS ingress ports",
 );
-assert.match(compose, /--api\.insecure=false/u);
-assert.doesNotMatch(compose, /--api\.insecure=true/u);
+assert.match(compose, /TRAEFIK_API_INSECURE: "false"/u);
+assert.doesNotMatch(compose, /TRAEFIK_API_INSECURE: "true"/u);
 assert.match(
   compose,
   /arrspire-dashboard:[\s\S]*?ASPIRE_DASHBOARD_FORWARDEDHEADERS_ENABLED: "true"/u,
@@ -68,6 +68,21 @@ assert.match(
   compose,
   /duplicati:[\s\S]*?DUPLICATI__WEBSERVICE_ALLOWED_HOSTNAMES: "\*"/u,
   "Duplicati must accept its authenticated ingress hostname",
+);
+assert.match(
+  compose,
+  /traefik:[\s\S]*?CF_DNS_API_TOKEN: "\$\{CLOUDFLARE_DNS_API_TOKEN\}"/u,
+  "Traefik must receive the Cloudflare token through a Compose environment placeholder",
+);
+assert.match(
+  compose,
+  /TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_STORAGE: "\/acme\/acme\.json"/u,
+  "Traefik must persist ACME account and certificate state",
+);
+assert.match(
+  compose,
+  /TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_DNSCHALLENGE: "true"/u,
+  "Traefik must activate the DNS-01 challenge in static configuration",
 );
 
 for (const match of compose.matchAll(/^\s+image: "([^"]+)"$/gmu)) {

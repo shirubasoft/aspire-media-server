@@ -113,3 +113,11 @@ export async function withComposeRestart(
     await service.restart.set(policy);
   });
 }
+
+export async function withComposeInit(
+  resource: ContainerResourcePromise,
+): Promise<void> {
+  await resource.publishAsDockerComposeService(async (_compose, service) => {
+    await service.init.set(true);
+  });
+}

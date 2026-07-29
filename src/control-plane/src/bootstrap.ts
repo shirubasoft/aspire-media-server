@@ -8,6 +8,11 @@ import { installJellyfinPlugins } from "./jellyfin-plugins.js";
 import { log } from "./log.js";
 import { reconcileRecyclarr } from "./recyclarr.js";
 import { writeBootstrapStatus } from "./status.js";
+import {
+  resolveTraefikTlsMode,
+  traefikRouterTlsConfiguration,
+  type TraefikTlsMode,
+} from "./traefik-tls.js";
 import { validateConfiguration } from "./validation.js";
 
 const dataDirectories = [
@@ -22,6 +27,7 @@ const dataDirectories = [
   "grafana-provisioning/datasources",
   "jellyfin",
   "jellyfin-cache",
+  // Preserve the legacy data directory for Seerr's automatic migration.
   "jellyseerr",
   "lidarr",
   "prometheus",
@@ -55,6 +61,9 @@ export function runtimeDirectoryPlan(): readonly RuntimeDirectory[] {
     // Recyclarr runs as UID/GID 1000 and needs to create its migration state
     // under /config when the scheduled job starts.
     { path: "/data/recyclarr", uid: 1000, gid: 1000 },
+    // Seerr's official rootless image runs as UID/GID 1000. The legacy
+    // Jellyseerr directory is intentionally retained for in-place migration.
+    { path: "/data/jellyseerr", uid: 1000, gid: 1000 },
     { path: "/media/movies", uid: 1000, gid: 1000 },
     { path: "/media/tv", uid: 1000, gid: 1000 },
     { path: "/media/music", uid: 1000, gid: 1000 },
@@ -132,6 +141,7 @@ function arrConfig({ name, port }: ArrBootstrap): string {
 interface RoutedService {
   readonly url: string;
   readonly requiresIngressAuthentication: boolean;
+  readonly aliases?: readonly string[];
 }
 
 function routedServices(): Readonly<Record<string, RoutedService>> {
@@ -162,9 +172,10 @@ function routedServices(): Readonly<Record<string, RoutedService>> {
       url: required("JELLYFIN_URL"),
       requiresIngressAuthentication: false,
     },
-    jellyseerr: {
-      url: required("JELLYSEERR_URL"),
+    seerr: {
+      url: required("SEERR_URL"),
       requiresIngressAuthentication: false,
+      aliases: ["jellyseerr"],
     },
     lidarr: {
       url: required("LIDARR_URL"),
@@ -202,15 +213,20 @@ export function traefikDynamicConfiguration(
   services: Readonly<Record<string, RoutedService>>,
   ingressUser: string,
   ingressPassword: string,
+  tlsMode: TraefikTlsMode = "local",
 ): string {
   const routerLines: string[] = [];
   const serviceLines: string[] = [];
+  const tlsConfiguration = traefikRouterTlsConfiguration(tlsMode);
   for (const [name, service] of Object.entries(services)) {
+    const hostRules = [name, ...(service.aliases ?? [])]
+      .map((hostname) => `Host(\`${hostname}.${domain}\`)`)
+      .join(" || ");
     routerLines.push(`    ${name}:
-      rule: 'Host(\`${name}.${domain}\`)'
+      rule: '${hostRules}'
       entryPoints: [websecure]
       service: ${name}
-      tls: {}
+${tlsConfiguration}
 ${service.requiresIngressAuthentication ? "      middlewares: [admin-auth]" : ""}`);
     serviceLines.push(`    ${name}:
       loadBalancer:
@@ -222,7 +238,7 @@ ${service.requiresIngressAuthentication ? "      middlewares: [admin-auth]" : ""
       entryPoints: [websecure]
       service: api@internal
       middlewares: [admin-auth]
-      tls: {}`);
+${tlsConfiguration}`);
   const passwordHash = createHash("sha1")
     .update(ingressPassword)
     .digest("base64");
@@ -316,6 +332,7 @@ export async function bootstrap(): Promise<void> {
 
   const services = routedServices();
   const domain = optional("TRAEFIK_DOMAIN", "192.168.0.15.nip.io");
+  const tlsMode = resolveTraefikTlsMode(process.env);
   const ingressUser = required("INGRESS_ADMIN_USER");
   const ingressPassword = required("INGRESS_ADMIN_PASSWORD");
   await Promise.all([
@@ -326,6 +343,7 @@ export async function bootstrap(): Promise<void> {
         services,
         ingressUser,
         ingressPassword,
+        tlsMode,
       ),
       0o644,
     ),

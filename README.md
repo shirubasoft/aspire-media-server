@@ -11,15 +11,15 @@ Aspire 13.4.6.
 
 - Gluetun VPN, qBittorrent, Prowlarr
 - Sonarr, Radarr, Lidarr, Bazarr
-- Jellyfin, Jellyseerr, Recyclarr
+- Jellyfin, Seerr, Recyclarr
 - Duplicati, Tdarr, Diun
 - Traefik, Fail2ban
 - Prometheus, Grafana, and the Aspire dashboard
 
 The bootstrap creates stable API keys and initial configuration files before
 services start. The reconciler then connects qBittorrent to the Arr apps,
-Prowlarr to every Arr app, Bazarr to Sonarr and Radarr, Jellyseerr to Jellyfin
-and the Arr apps, and Jellyfin to Bazarr and Jellyseerr. It also installs the
+Prowlarr to every Arr app, Bazarr to Sonarr and Radarr, Seerr to Jellyfin
+and the Arr apps, and Jellyfin to Bazarr and Seerr. It also installs the
 pinned Jellyfin plugin set with verified checksums and writes the Recyclarr,
 Traefik, Fail2ban, Prometheus, and Grafana configuration.
 
@@ -79,7 +79,7 @@ It uses ports 80/443 on rootful Docker or Podman and automatically uses
 unprivileged ports 8080/8443 with rootless Podman. Override the host ports with
 `ARRSPIRE_INGRESS_HTTP_PORT` and `ARRSPIRE_INGRESS_HTTPS_PORT` when needed.
 Traefik redirects HTTP to HTTPS and requires the generated Arrspire ingress
-credentials for administrative UIs. Jellyfin and Jellyseerr retain their own
+credentials for administrative UIs. Jellyfin and Seerr retain their own
 service authentication. The insecure Traefik dashboard and direct service
 ports are disabled.
 
@@ -103,6 +103,27 @@ The certificate and private CA stay under ignored
 `data/traefik/dynamic/certs/` with restrictive permissions. Do not copy the
 local CA private key to another machine.
 
+For clients that cannot trust a private CA, Arrspire can instead request
+publicly trusted certificates through Cloudflare DNS and Let's Encrypt. This
+mode remains LAN-only when the DNS records resolve to a private address and no
+router ports are forwarded:
+
+```bash
+Parameters__traefik_domain=home.example.com \
+Parameters__traefik_tls_mode=cloudflare-acme \
+Parameters__traefik_acme_email=operator@example.com \
+Parameters__cloudflare_dns_api_token="<scoped-token>" \
+npm run deploy
+```
+
+Create DNS-only records for the service hostnames (or a scoped wildcard such
+as `*.home.example.com`) pointing to the server's LAN address. The Cloudflare
+token needs only `Zone:Read` and `DNS:Edit` for the selected zone. The domain,
+email, token, server address, and ingress ports are deployment inputs; none are
+hardcoded into the ACME integration. Keep the token out of shell history and
+source control by supplying it through the Aspire secret store or a protected
+deployment environment.
+
 Local Aspire users can rerun the completed reconciler with
 `aspire resource reconciler start --non-interactive`; its structured summary
 remains visible in the Aspire dashboard.
@@ -116,7 +137,7 @@ npm test
 
 The E2E test launches a new isolated copy of the complete stack, waits for the
 TypeScript bootstrap and reconciler, verifies persisted files and the real
-qBittorrent, Arr, Bazarr, Jellyfin, and Jellyseerr APIs, then restarts the same
+qBittorrent, Arr, Bazarr, Jellyfin, and Seerr APIs, then restarts the same
 stack and verifies it again. It uses no mocks. A configured VPN secret and a
 container engine are required. Because Aspire isolated mode intentionally does
 not reuse user secrets, provide the VPN key explicitly:
@@ -177,9 +198,9 @@ container with three commands:
 
 CI starts an isolated stack twice and complements the API acceptance checks
 with headless Playwright coverage. The browser suite crosses Traefik, opens
-every web UI, exercises Jellyfin, Jellyseerr, qBittorrent, Duplicati, and
+every web UI, exercises Jellyfin, Seerr, qBittorrent, Duplicati, and
 Grafana login flows, navigates the Jellyfin libraries, and verifies the
-Jellyseerr and Grafana service-integration screens.
+Seerr and Grafana service-integration screens.
 
 Public tracker registration is best-effort because third-party availability and
 bot protection are outside the stack's control. Core service configuration is

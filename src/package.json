@@ -31,6 +31,7 @@
     "repair": "tsx scripts/deployment.mts repair",
     "status": "tsx scripts/deployment.mts status",
     "tls:local": "tsx scripts/local-tls.mts",
+    "network:allow-lan": "tsx scripts/allow-lan.mts",
     "locale": "tsx scripts/locale-profile.mts",
     "cleanup:vpn": "tsx scripts/cleanup-vpn.mts",
     "watch": "npm run aspire:dev"

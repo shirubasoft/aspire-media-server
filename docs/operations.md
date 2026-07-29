@@ -62,7 +62,14 @@ The checked-in default targets the current server at
 changes. Phones and other clients must be on a network that can reach the
 server, and must trust only
 `data/traefik/dynamic/certs/arrspire-local-ca.crt`; never distribute the CA
-private key.
+private key. If UFW is enabled, authorize a rule scoped to the active LAN and
+published HTTPS port with:
+
+```bash
+npm run network:allow-lan
+```
+
+Set `ARRSPIRE_LAN_CIDR` when the default route is not the client-facing LAN.
 
 `ready` means all configured integrations converged. `degraded` means the core
 stack is usable but an optional integration was skipped or failed. `failed`

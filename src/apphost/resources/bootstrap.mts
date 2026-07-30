@@ -3,6 +3,7 @@ import {
   type ControlPlaneEndpoints,
   withEndpointEnvironment,
 } from "./control-plane.mjs";
+import { resolveIngressPorts } from "../ingress.mjs";
 import {
   type ArrspireResource,
   createResource,
@@ -15,6 +16,7 @@ export function addBootstrap(
   context: ResourceContext,
   endpoints: ControlPlaneEndpoints,
 ): BootstrapResource {
+  const httpsPort = resolveIngressPorts(context.paths.rootlessPodman).https;
   const resource = withEndpointEnvironment(
     addControlPlaneContainer(context, "bootstrap", "bootstrap")
       .withEnvironment(
@@ -29,6 +31,7 @@ export function addBootstrap(
         "TRAEFIK_TLS_MODE",
         context.parameters.traefikTlsMode,
       )
+      .withEnvironment("TRAEFIK_HTTPS_PORT", String(httpsPort))
       .withEnvironment(
         "TRAEFIK_ACME_EMAIL",
         context.parameters.traefikAcmeEmail,

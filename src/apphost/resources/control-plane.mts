@@ -2,6 +2,7 @@ import type {
   ContainerResourcePromise,
   EndpointReferencePromise,
 } from "../../.aspire/modules/aspire.mjs";
+import { resolveIngressPorts } from "../ingress.mjs";
 import type {
   ArrspireResourcePromise,
   ResourceContext,
@@ -13,17 +14,22 @@ export type ControlPlaneEndpoints = Readonly<
 
 export function addControlPlaneContainer(
   context: ResourceContext,
-  name: "bootstrap" | "reconciler" | "acceptance",
-  command: "bootstrap" | "reconcile" | "verify",
+  name: "bootstrap" | "reconciler" | "acceptance" | "notifier",
+  command: "bootstrap" | "reconcile" | "verify" | "serve-notifications",
+  includeApplicationPaths = true,
 ): ContainerResourcePromise {
-  return context.builder
+  let resource = context.builder
     .addDockerfile(name, ".", {
       dockerfilePath: "control-plane/Dockerfile",
     })
     .withArgs([command])
-    .withBindMount(context.paths.data, "/data")
-    .withBindMount(context.paths.media, "/media")
-    .withBindMount(context.paths.downloads, "/downloads");
+    .withBindMount(context.paths.data, "/data");
+  if (includeApplicationPaths) {
+    resource = resource
+      .withBindMount(context.paths.media, "/media")
+      .withBindMount(context.paths.downloads, "/downloads");
+  }
+  return resource;
 }
 
 export function withEndpointEnvironment(
@@ -44,6 +50,22 @@ export function withEndpointEnvironment(
   }
 
   return configured;
+}
+
+export function withPublicIngressEnvironment(
+  resource: ContainerResourcePromise,
+  context: ResourceContext,
+): ContainerResourcePromise {
+  const ingressPorts = resolveIngressPorts(context.paths.rootlessPodman);
+  return resource
+    .withEnvironment(
+      "TRAEFIK_DOMAIN",
+      context.parameters.traefikDomain,
+    )
+    .withEnvironment(
+      "INGRESS_HTTPS_PORT",
+      String(ingressPorts.https),
+    );
 }
 
 export function waitForResources(

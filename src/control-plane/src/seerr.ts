@@ -12,6 +12,11 @@ interface ArrSummary {
   readonly path?: string;
 }
 
+export interface SeerrExternalUrls {
+  readonly sonarr: string;
+  readonly radarr: string;
+}
+
 export class SeerrClient {
   private cookie = "";
 
@@ -28,6 +33,7 @@ export class SeerrClient {
     sonarrApiKey: string,
     radarrUrl: string,
     radarrApiKey: string,
+    externalUrls: SeerrExternalUrls,
   ): Promise<void> {
     const initialized = await this.isInitialized();
     if (initialized) {
@@ -35,8 +41,20 @@ export class SeerrClient {
     } else {
       await this.authenticate();
     }
-    await this.reconcileArr("sonarr", sonarrUrl, sonarrApiKey, "/tv");
-    await this.reconcileArr("radarr", radarrUrl, radarrApiKey, "/movies");
+    await this.reconcileArr(
+      "sonarr",
+      sonarrUrl,
+      sonarrApiKey,
+      "/tv",
+      externalUrls.sonarr,
+    );
+    await this.reconcileArr(
+      "radarr",
+      radarrUrl,
+      radarrApiKey,
+      "/movies",
+      externalUrls.radarr,
+    );
     if (!initialized) {
       await request(`${this.baseUrl}/api/v1/settings/initialize`, {
         method: "POST",
@@ -133,6 +151,7 @@ export class SeerrClient {
     url: string,
     apiKey: string,
     fallbackDirectory: string,
+    externalUrl: string,
   ): Promise<void> {
     const endpoint = new URL(url);
     const headers = { "X-Api-Key": apiKey };
@@ -159,7 +178,7 @@ export class SeerrClient {
       activeDirectory: folder?.path ?? fallbackDirectory,
       is4k: false,
       isDefault: true,
-      externalUrl: "",
+      externalUrl,
       syncEnabled: true,
       preventSearch: false,
       ...(kind === "sonarr"

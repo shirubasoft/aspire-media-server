@@ -10,6 +10,8 @@ import {
   addFail2ban,
   addGluetun,
   addGrafana,
+  addHomepage,
+  addNotifier,
   addJellyfin,
   addLidarr,
   addPrometheus,
@@ -30,6 +32,8 @@ import {
   type Fail2banResource,
   type GluetunResource,
   type GrafanaResource,
+  type HomepageResource,
+  type NotifierResource,
   type JellyfinResource,
   type LidarrResource,
   type PrometheusResource,
@@ -65,6 +69,8 @@ export type ArrspireTopology = Readonly<{
   diun: DiunResource;
   prometheus: PrometheusResource;
   grafana: GrafanaResource;
+  homepage: HomepageResource;
+  notifier: NotifierResource;
   bootstrap: BootstrapResource;
   reconciler: ReconcilerResource;
   acceptance?: AcceptanceResource;
@@ -98,9 +104,13 @@ export async function addArrspireTopology(
   const tdarr = addTdarr(context);
   const traefik = addTraefik(context);
   const fail2ban = await addFail2ban(context, traefik);
-  const diun = addDiun(context);
   const prometheus = addPrometheus(context);
   const grafana = addGrafana(context, prometheus);
+  const homepage = await addHomepage(context);
+  const notifier = await addNotifier(context, {
+    homepage: homepage.http,
+  });
+  const diun = await addDiun(context, notifier);
 
   const applicationEndpoints = {
     sonarr: sonarr.http,
@@ -113,6 +123,7 @@ export async function addArrspireTopology(
     qbittorrent: qbittorrent.http,
     tdarr: tdarr.webUi,
     duplicati: duplicati.http,
+    homepage: homepage.http,
   };
 
   const bootstrap = addBootstrap(context, {
@@ -139,6 +150,8 @@ export async function addArrspireTopology(
     diun.resource,
     prometheus.resource,
     grafana.resource,
+    homepage.resource,
+    notifier.resource,
   ];
 
   await Promise.all(
@@ -158,10 +171,12 @@ export async function addArrspireTopology(
     jellyfin.resource,
     seerr.resource,
     tdarr.resource,
+    notifier.resource,
   ];
   const reconciliationEndpoints = {
     gluetunProxy: gluetun.httpProxy,
     ingress: traefik.https,
+    notifier: notifier.http,
     ...applicationEndpoints,
   };
   await recyclarr.sync.waitFor(sonarr.resource);
@@ -181,7 +196,7 @@ export async function addArrspireTopology(
           context,
           reconciliationEndpoints,
           reconciler,
-          reconciledResources,
+          [...reconciledResources, homepage.resource],
         )
       : undefined;
 
@@ -203,6 +218,8 @@ export async function addArrspireTopology(
       diun.resource,
       prometheus.resource,
       grafana.resource,
+      homepage.resource,
+      notifier.resource,
     ].map((resource) => withComposeRestart(resource)),
     withComposeInit(seerr.resource),
     withComposeRestart(reconciler.resource, "on-failure:5"),
@@ -226,6 +243,8 @@ export async function addArrspireTopology(
     diun,
     prometheus,
     grafana,
+    homepage,
+    notifier,
     bootstrap,
     reconciler,
     ...(acceptance === undefined ? {} : { acceptance }),

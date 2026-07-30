@@ -6,9 +6,10 @@ import {
   readBazarrApiKey,
   readSeerrApiKey,
 } from "./api-key.js";
-import { required } from "./environment.js";
+import { integer, required } from "./environment.js";
 import { form, json, request } from "./http.js";
 import { log } from "./log.js";
+import { publicServiceUrl } from "./public-url.js";
 
 type JsonObject = Record<string, unknown>;
 
@@ -60,6 +61,15 @@ async function verifyBootstrapFiles(): Promise<void> {
     "/data/fail2ban/filter.d/traefik-auth.conf",
     "/data/fail2ban/jail.d/traefik.conf",
     "/data/grafana-provisioning/datasources/prometheus.yml",
+    "/data/homepage/bookmarks.yaml",
+    "/data/homepage/custom.css",
+    "/data/homepage/custom.js",
+    "/data/homepage/docker.yaml",
+    "/data/homepage/kubernetes.yaml",
+    "/data/homepage/proxmox.yaml",
+    "/data/homepage/services.yaml",
+    "/data/homepage/settings.yaml",
+    "/data/homepage/widgets.yaml",
     "/data/prometheus-config/prometheus.yml",
     "/data/recyclarr/recyclarr.yml",
     "/data/status/bootstrap.json",
@@ -81,9 +91,10 @@ async function verifyBootstrapFiles(): Promise<void> {
     "utf8",
   );
   ensure(
-    ingress.includes("Host(`aspire.") &&
+    ingress.includes(`Host(\`${required("TRAEFIK_DOMAIN")}\`)`) &&
+      ingress.includes("Host(`aspire.") &&
       ingress.includes("http://arrspire-dashboard:18888"),
-    "Aspire dashboard is not protected by the application ingress",
+    "Arrspire home or the Aspire dashboard is not protected by ingress",
   );
 
   const pluginDirectories = await readdir("/data/jellyfin/plugins");
@@ -396,12 +407,16 @@ async function verifySeerr(apiKey: string): Promise<void> {
         readonly animeSeriesType?: string;
         readonly activeAnimeProfileName?: string;
         readonly activeAnimeDirectory?: string;
+        readonly externalUrl?: string;
       }>
     >(
       `${baseUrl}/api/v1/settings/sonarr`,
       { headers },
     ),
-    json<Array<{ readonly isDefault?: boolean }>>(
+    json<Array<{
+      readonly isDefault?: boolean;
+      readonly externalUrl?: string;
+    }>>(
       `${baseUrl}/api/v1/settings/radarr`,
       { headers },
     ),
@@ -418,6 +433,17 @@ async function verifySeerr(apiKey: string): Promise<void> {
     sonarr.some((service) => service.isDefault),
     "Seerr has no default Sonarr",
   );
+  const domain = required("TRAEFIK_DOMAIN");
+  const ingressHttpsPort = integer("INGRESS_HTTPS_PORT", 443);
+  ensure(
+    sonarr.some(
+      (service) =>
+        service.isDefault &&
+        service.externalUrl ===
+          publicServiceUrl("sonarr", domain, ingressHttpsPort),
+    ),
+    "Seerr Sonarr external URL is not reconciled",
+  );
   ensure(
     sonarr.some(
       (service) =>
@@ -431,6 +457,15 @@ async function verifySeerr(apiKey: string): Promise<void> {
   ensure(
     radarr.some((service) => service.isDefault),
     "Seerr has no default Radarr",
+  );
+  ensure(
+    radarr.some(
+      (service) =>
+        service.isDefault &&
+        service.externalUrl ===
+          publicServiceUrl("radarr", domain, ingressHttpsPort),
+    ),
+    "Seerr Radarr external URL is not reconciled",
   );
   const authentication = await request(
     `${baseUrl}/api/v1/auth/jellyfin`,

@@ -24,6 +24,8 @@ export const images = {
     "docker.io/jellyfin/jellyfin:10.11.11@sha256:aefb67e6a7ff1debdd154a78a7bbb780fd0c873d8639210a7f6a2016ad2b35db",
   seerr:
     "ghcr.io/seerr-team/seerr:latest@sha256:d206d9e4056bb90178297df58047791196e7721e6dc19384579b0530702fe086",
+  homepage:
+    "ghcr.io/gethomepage/homepage:latest@sha256:a0b71c8e757298d02560186bab9fbe3fc2d375c523a62cc1019177b37e48aa28",
   recyclarr:
     "ghcr.io/recyclarr/recyclarr:latest@sha256:55afe316d3e4e4e3b9120cef7c79436b1b5311f6a18d4ef4b7653e720499c90a",
   duplicati:

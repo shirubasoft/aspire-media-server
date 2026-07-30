@@ -6,6 +6,7 @@ import {
   type ControlPlaneEndpoints,
   waitForResources,
   withEndpointEnvironment,
+  withPublicIngressEnvironment,
 } from "./control-plane.mjs";
 import type { ReconcilerResource } from "./reconciler.mjs";
 import {
@@ -25,23 +26,22 @@ export function addAcceptance(
 ): AcceptanceResource {
   const resource = waitForResources(
     withEndpointEnvironment(
-      addControlPlaneContainer(context, "acceptance", "verify")
-        .withEnvironment(
-          "JELLYFIN_ADMIN_USER",
-          context.parameters.jellyfinAdminUser,
-        )
-        .withEnvironment(
-          "JELLYFIN_ADMIN_PASSWORD",
-          context.parameters.jellyfinAdminPassword,
-        )
-        .withEnvironment(
-          "QBITTORRENT_PASSWORD",
-          context.parameters.qbittorrentPassword,
-        )
-        .withEnvironment(
-          "TRAEFIK_DOMAIN",
-          context.parameters.traefikDomain,
-        ),
+      withPublicIngressEnvironment(
+        addControlPlaneContainer(context, "acceptance", "verify")
+          .withEnvironment(
+            "JELLYFIN_ADMIN_USER",
+            context.parameters.jellyfinAdminUser,
+          )
+          .withEnvironment(
+            "JELLYFIN_ADMIN_PASSWORD",
+            context.parameters.jellyfinAdminPassword,
+          )
+          .withEnvironment(
+            "QBITTORRENT_PASSWORD",
+            context.parameters.qbittorrentPassword,
+          ),
+        context,
+      ),
       endpoints,
     )
       .waitForCompletion(reconciler.resource)

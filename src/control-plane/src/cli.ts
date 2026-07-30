@@ -1,6 +1,7 @@
 import { verifyAcceptance } from "./acceptance.js";
 import { bootstrap } from "./bootstrap.js";
 import { log } from "./log.js";
+import { serveNotifications } from "./notifications.js";
 import { reconcile } from "./reconcile.js";
 import { retry } from "./retry.js";
 
@@ -29,8 +30,12 @@ async function main(): Promise<void> {
     await verifyAcceptance();
     return;
   }
+  if (command === "serve-notifications") {
+    await serveNotifications();
+    return;
+  }
   throw new Error(
-    `Expected "bootstrap", "reconcile", or "verify", received ${command}`,
+    `Expected "bootstrap", "reconcile", "serve-notifications", or "verify", received ${command}`,
   );
 }
 

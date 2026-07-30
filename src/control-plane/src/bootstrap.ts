@@ -2,12 +2,17 @@ import { createHash, pbkdf2Sync, randomBytes } from "node:crypto";
 import { chown, lchown, lstat, mkdir, opendir } from "node:fs/promises";
 import { join } from "node:path";
 
-import { optional, required } from "./environment.js";
+import { integer, optional, required } from "./environment.js";
 import { readArrApiKey } from "./api-key.js";
 import { writeIfChanged, writeOnce } from "./files.js";
 import { installJellyfinPlugins } from "./jellyfin-plugins.js";
 import { log } from "./log.js";
 import { reconcileRecyclarr } from "./recyclarr.js";
+import {
+  type AuthenticationMode,
+  requiresIngressAuthentication,
+  serviceSurface,
+} from "./service-surfaces.js";
 import { writeBootstrapStatus } from "./status.js";
 import {
   resolveTraefikTlsMode,
@@ -26,6 +31,7 @@ const dataDirectories = [
   "gluetun",
   "grafana",
   "grafana-provisioning/datasources",
+  "homepage/secrets",
   "jellyfin",
   "jellyfin-cache",
   // Preserve the legacy data directory for Seerr's automatic migration.
@@ -162,70 +168,78 @@ function arrConfig({ name, port }: ArrBootstrap): string {
 
 interface RoutedService {
   readonly url: string;
-  readonly requiresIngressAuthentication: boolean;
+  readonly authentication: AuthenticationMode;
   readonly aliases?: readonly string[];
+  readonly hosts?: readonly string[];
 }
 
-function routedServices(): Readonly<Record<string, RoutedService>> {
+function routedServices(
+  domain: string,
+): Readonly<Record<string, RoutedService>> {
   return {
     aspire: {
       url: optional(
         "ASPIRE_DASHBOARD_URL",
         "http://arrspire-dashboard:18888",
       ),
-      requiresIngressAuthentication: true,
+      authentication: serviceSurface("aspire").authentication,
     },
     bazarr: {
       url: required("BAZARR_URL"),
-      requiresIngressAuthentication: true,
+      authentication: serviceSurface("bazarr").authentication,
     },
     duplicati: {
       url: required("DUPLICATI_URL"),
       // Duplicati authenticates API calls with a Bearer token. Applying
       // Traefik BasicAuth here would consume the same Authorization header
       // and make the web UI fail immediately after a successful login.
-      requiresIngressAuthentication: false,
+      authentication: serviceSurface("duplicati").authentication,
     },
     grafana: {
       url: required("GRAFANA_URL"),
-      requiresIngressAuthentication: true,
+      authentication: serviceSurface("grafana").authentication,
+    },
+    homepage: {
+      url: required("HOMEPAGE_URL"),
+      authentication: serviceSurface("home").authentication,
+      hosts: [domain, `home.${domain}`],
     },
     jellyfin: {
       url: required("JELLYFIN_URL"),
-      requiresIngressAuthentication: false,
+      authentication: serviceSurface("jellyfin").authentication,
     },
     seerr: {
       url: required("SEERR_URL"),
-      requiresIngressAuthentication: false,
+      authentication: serviceSurface("seerr").authentication,
       aliases: ["jellyseerr"],
     },
     lidarr: {
       url: required("LIDARR_URL"),
-      requiresIngressAuthentication: true,
+      authentication: serviceSurface("lidarr").authentication,
     },
     prometheus: {
       url: required("PROMETHEUS_URL"),
-      requiresIngressAuthentication: true,
+      authentication: serviceSurface("prometheus").authentication,
     },
     prowlarr: {
       url: required("PROWLARR_URL"),
-      requiresIngressAuthentication: true,
+      authentication: serviceSurface("prowlarr").authentication,
     },
     qbittorrent: {
       url: required("QBITTORRENT_URL"),
-      requiresIngressAuthentication: true,
+      authentication: serviceSurface("qbittorrent").authentication,
     },
     radarr: {
       url: required("RADARR_URL"),
-      requiresIngressAuthentication: true,
+      authentication: serviceSurface("radarr").authentication,
     },
     sonarr: {
       url: required("SONARR_URL"),
-      requiresIngressAuthentication: true,
+      authentication: serviceSurface("sonarr").authentication,
     },
     tdarr: {
       url: required("TDARR_URL"),
-      requiresIngressAuthentication: true,
+      authentication: serviceSurface("tdarr").authentication,
     },
   };
 }
@@ -241,15 +255,20 @@ export function traefikDynamicConfiguration(
   const serviceLines: string[] = [];
   const tlsConfiguration = traefikRouterTlsConfiguration(tlsMode);
   for (const [name, service] of Object.entries(services)) {
-    const hostRules = [name, ...(service.aliases ?? [])]
-      .map((hostname) => `Host(\`${hostname}.${domain}\`)`)
+    const hostRules = (
+      service.hosts ??
+      [name, ...(service.aliases ?? [])].map(
+        (hostname) => `${hostname}.${domain}`,
+      )
+    )
+      .map((hostname) => `Host(\`${hostname}\`)`)
       .join(" || ");
     routerLines.push(`    ${name}:
       rule: '${hostRules}'
       entryPoints: [websecure]
       service: ${name}
 ${tlsConfiguration}
-${service.requiresIngressAuthentication ? "      middlewares: [admin-auth]" : ""}`);
+${requiresIngressAuthentication(service.authentication) ? "      middlewares: [admin-auth]" : ""}`);
     serviceLines.push(`    ${name}:
       loadBalancer:
         servers:
@@ -316,6 +335,169 @@ datasources:
 `;
 }
 
+function yamlString(value: string): string {
+  return JSON.stringify(value);
+}
+
+function externalServiceUrl(
+  service: string,
+  domain: string,
+  httpsPort: number,
+): string {
+  const port = httpsPort === 443 ? "" : `:${String(httpsPort)}`;
+  return `https://${service}.${domain}${port}`;
+}
+
+interface HomepageService {
+  readonly name: string;
+  readonly icon: string;
+  readonly description: string;
+  readonly internalUrl: string;
+  readonly healthPath: string;
+  readonly widget?: Readonly<{
+    readonly type: string;
+    readonly secretName?: string;
+    readonly username?: string;
+    readonly passwordSecretName?: string;
+    readonly fields?: readonly string[];
+  }>;
+}
+
+function homepageCard(
+  service: HomepageService,
+  domain: string,
+  httpsPort: number,
+): string {
+  const lines = [
+    `    - ${service.name}:`,
+    `        icon: ${service.icon}`,
+    `        href: ${yamlString(externalServiceUrl(service.name.toLowerCase(), domain, httpsPort))}`,
+    `        description: ${yamlString(service.description)}`,
+    `        siteMonitor: ${yamlString(`${service.internalUrl}${service.healthPath}`)}`,
+  ];
+  if (service.widget !== undefined) {
+    lines.push(
+      "        widget:",
+      `          type: ${service.widget.type}`,
+      `          url: ${yamlString(service.internalUrl)}`,
+    );
+    if (service.widget.secretName !== undefined) {
+      lines.push(
+        `          key: "{{HOMEPAGE_FILE_${service.widget.secretName}}}"`,
+      );
+    }
+    if (service.widget.username !== undefined) {
+      lines.push(`          username: ${service.widget.username}`);
+    }
+    if (service.widget.passwordSecretName !== undefined) {
+      lines.push(
+        `          password: "{{HOMEPAGE_FILE_${service.widget.passwordSecretName}}}"`,
+      );
+    }
+    if (service.widget.fields !== undefined) {
+      lines.push(
+        `          fields: [${service.widget.fields.map(yamlString).join(", ")}]`,
+      );
+    }
+  }
+  return lines.join("\n");
+}
+
+export function homepageSettings(): string {
+  return `title: Arrspire
+description: Media, requests, automation, and operations
+theme: dark
+color: slate
+headerStyle: boxedWidgets
+statusStyle: dot
+hideVersion: true
+disableIndexing: true
+target: _self
+layout:
+  Watch and Request:
+    style: row
+    columns: 2
+  Library Automation:
+    style: row
+    columns: 4
+  Downloads and Processing:
+    style: row
+    columns: 4
+  Operations:
+    style: row
+    columns: 4
+`;
+}
+
+export function homepageServices(
+  domain: string,
+  httpsPort: number,
+  services: Readonly<Record<string, RoutedService>>,
+): string {
+  const card = (
+    name: string,
+    icon: string,
+    description: string,
+    healthPath: string,
+    widget?: HomepageService["widget"],
+  ): string =>
+    homepageCard(
+      {
+        name,
+        icon,
+        description,
+        internalUrl: services[name.toLowerCase()]?.url ?? "",
+        healthPath,
+        ...(widget === undefined ? {} : { widget }),
+      },
+      domain,
+      httpsPort,
+    );
+
+  return `- Watch and Request:
+${card("Jellyfin", "jellyfin.png", "Watch movies, series, and music", "/health")}
+${card("Seerr", "seerr.png", "Request movies and series", "/api/v1/status")}
+
+- Library Automation:
+${card("Sonarr", "sonarr.png", "Series library", "/ping", { type: "sonarr", secretName: "SONARR_KEY", fields: ["wanted", "queued"] })}
+${card("Radarr", "radarr.png", "Movie library", "/ping", { type: "radarr", secretName: "RADARR_KEY", fields: ["wanted", "queued"] })}
+${card("Lidarr", "lidarr.png", "Music library", "/ping", { type: "lidarr", secretName: "LIDARR_KEY" })}
+${card("Prowlarr", "prowlarr.png", "Indexer management", "/ping", { type: "prowlarr", secretName: "PROWLARR_KEY" })}
+
+- Downloads and Processing:
+${card("qBittorrent", "qbittorrent.png", "Download queue", "/", { type: "qbittorrent", username: "admin", passwordSecretName: "QBITTORRENT_PASSWORD" })}
+${card("Bazarr", "bazarr.png", "Subtitle automation", "/")}
+${card("Tdarr", "tdarr.png", "Media health and transcoding", "/api/v2/status", { type: "tdarr" })}
+${card("Duplicati", "duplicati.png", "Configuration backups", "/ngclient/")}
+
+- Operations:
+${card("Grafana", "grafana.png", "Metrics dashboards", "/api/health")}
+${card("Prometheus", "prometheus.png", "Metrics collection", "/-/healthy")}
+${homepageCard(
+  {
+    name: "Aspire",
+    icon: "microsoft-azure.png",
+    description: "Resources, logs, traces, and commands",
+    internalUrl: services.aspire?.url ?? "",
+    healthPath: "/",
+  },
+  domain,
+  httpsPort,
+)}
+${homepageCard(
+  {
+    name: "Traefik",
+    icon: "traefik-proxy.png",
+    description: "Ingress routes and TLS",
+    internalUrl: "http://traefik:8080",
+    healthPath: "/ping",
+  },
+  domain,
+  httpsPort,
+)}
+`;
+}
+
 export async function bootstrap(): Promise<void> {
   log.info("Starting deterministic bootstrap");
   validateConfiguration(process.env);
@@ -349,15 +531,22 @@ export async function bootstrap(): Promise<void> {
       created,
     });
   }
+  const domain = optional("TRAEFIK_DOMAIN", "192.168.0.15.nip.io");
+  const httpsPort = integer("TRAEFIK_HTTPS_PORT", 443);
+  const services = routedServices(domain);
+  const [sonarrKey, radarrKey, lidarrKey, prowlarrKey] = await Promise.all([
+    readArrApiKey("sonarr"),
+    readArrApiKey("radarr"),
+    readArrApiKey("lidarr"),
+    readArrApiKey("prowlarr"),
+  ]);
   await reconcileRecyclarr(
     required("SONARR_URL"),
-    await readArrApiKey("sonarr"),
+    sonarrKey,
     required("RADARR_URL"),
-    await readArrApiKey("radarr"),
+    radarrKey,
   );
 
-  const services = routedServices();
-  const domain = optional("TRAEFIK_DOMAIN", "192.168.0.15.nip.io");
   const tlsMode = resolveTraefikTlsMode(process.env);
   const ingressUser = required("INGRESS_ADMIN_USER");
   const ingressPassword = required("INGRESS_ADMIN_PASSWORD");
@@ -394,6 +583,43 @@ export async function bootstrap(): Promise<void> {
         services.prometheus?.url ?? "http://prometheus:9090",
       ),
       0o644,
+    ),
+    writeIfChanged(
+      "/data/homepage/settings.yaml",
+      homepageSettings(),
+      0o644,
+    ),
+    writeIfChanged(
+      "/data/homepage/services.yaml",
+      homepageServices(domain, httpsPort, services),
+      0o644,
+    ),
+    writeIfChanged("/data/homepage/bookmarks.yaml", "[]\n", 0o644),
+    writeIfChanged("/data/homepage/widgets.yaml", "[]\n", 0o644),
+    writeIfChanged("/data/homepage/docker.yaml", "{}\n", 0o644),
+    writeIfChanged("/data/homepage/kubernetes.yaml", "---\n", 0o644),
+    writeIfChanged("/data/homepage/proxmox.yaml", "---\n", 0o644),
+    writeIfChanged("/data/homepage/custom.css", "", 0o644),
+    writeIfChanged("/data/homepage/custom.js", "", 0o644),
+    writeIfChanged(
+      "/data/homepage/secrets/sonarr-key",
+      sonarrKey,
+    ),
+    writeIfChanged(
+      "/data/homepage/secrets/radarr-key",
+      radarrKey,
+    ),
+    writeIfChanged(
+      "/data/homepage/secrets/lidarr-key",
+      lidarrKey,
+    ),
+    writeIfChanged(
+      "/data/homepage/secrets/prowlarr-key",
+      prowlarrKey,
+    ),
+    writeIfChanged(
+      "/data/homepage/secrets/qbittorrent-password",
+      password,
     ),
   ]);
   await writeBootstrapStatus();

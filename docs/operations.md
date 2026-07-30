@@ -2,6 +2,22 @@
 
 ## Access boundary and first-run handoff
 
+Run `npm run setup` for the guided first-run flow and `npm run doctor` before
+starting or deploying. Setup validates all inputs before it writes them,
+stores parameters in the Aspire secret store, creates the selected
+data/media/download directories, and writes only non-secret path choices to
+ignored `src/.arrspire/config.json`. Environment path overrides remain
+higher-priority. `npm run setup -- --non-interactive` uses existing Aspire
+values plus protected `Parameters__*` and `ARRSPIRE_*_PATH` environment
+variables for automation.
+
+Doctor never changes configuration. It verifies the runtime toolchain,
+container engine and Compose, secret presence and structure, paths and free
+space, container socket, ingress ports, DNS, TLS inputs/certificate, ntfy
+settings, and the latest bootstrap/reconciliation state. A missing deployment
+or local certificate is a warning during first run; an invalid required VPN key
+or inaccessible bind mount is a failure.
+
 Traefik is the only Arrspire application service published on host ports by
 default (`80` and `443`, or `8080` and `8443` when rootless Podman is
 detected). Set `ARRSPIRE_INGRESS_HTTP_PORT` and
@@ -38,7 +54,9 @@ inbound access.
 
 1. Choose a deployment-owned suffix such as `home.example.com`.
 2. In the matching Cloudflare zone, create DNS-only service records or a
-   scoped wildcard record pointing to the server's LAN address.
+   scoped wildcard record pointing to the server's LAN address. The deployment
+   pipeline creates the bare Homepage A/AAAA record from that scoped wildcard
+   when it is missing.
 3. Create a Cloudflare API token restricted to that zone with `Zone:Read` and
    `DNS:Edit`.
 4. Supply the following deployment parameters:
@@ -57,6 +75,13 @@ private RFC1918 targets and do not forward ingress ports merely to satisfy
 certificate validation. Returning to `local` mode may require rerunning
 `npm run tls:local` for the selected domain.
 
+Use `npm run deploy`, not a direct `aspire deploy`, for live changes. The
+project pipeline hydrates unset deployment parameters from the latest Aspire
+secrets, recovers Podman's project-scoped Gluetun dependency conflict if it
+occurs, reconciles the bare Homepage DNS record in Cloudflare ACME mode, and
+waits for a publicly trusted certificate, HTTP 401 without credentials, and
+HTTP 200 with the configured ingress credentials.
+
 Direct service publication is an explicit diagnostic escape hatch:
 
 ```bash
@@ -72,17 +97,26 @@ prints it again without revealing secret values. Representative output:
 
 ```text
 Arrspire access (HTTPS)
+Arrspire home     https://home.192.168.0.15.nip.io:8443           Arrspire ingress credentials
 Jellyfin          https://jellyfin.192.168.0.15.nip.io:8443       Service credentials
 Sonarr            https://sonarr.192.168.0.15.nip.io:8443         Arrspire ingress credentials
 Traefik dashboard https://traefik.192.168.0.15.nip.io:8443        Arrspire ingress credentials
 
 Readiness
 bootstrap         ready
-reconciliation    degraded
+reconciliation    attention
 
-Integrations requiring attention
-subtitle-provider:OpenSubtitles.com skipped  credentials were not supplied
+External services unavailable
+public-indexer:EZTV  Unable to access EZTV, blocked by Cloudflare protection
+
+Optional integrations not configured
+subtitle-provider:OpenSubtitles.org  credentials were not supplied
 ```
+
+The same portal is routed from the configured bare domain. Homepage reads
+service API keys from mode-`0600` files under `data/homepage/secrets/`; its
+generated YAML contains only file references. Keep the portal behind the
+administrative ingress boundary.
 
 The checked-in default targets the current server at
 `192.168.0.15.nip.io`. Override it with
@@ -99,11 +133,30 @@ npm run network:allow-lan
 
 Set `ARRSPIRE_LAN_CIDR` when the default route is not the client-facing LAN.
 
-`ready` means all configured integrations converged. `degraded` means the core
-stack is usable but an optional integration was skipped or failed. `failed`
-means a required integration did not converge. The latest machine-readable
-summaries live in `data/status/`, and the reconciler logs the same redacted
-summary in the Aspire dashboard.
+`ready` means every configured integration converged; optional integrations
+that were never configured remain informational. `attention` means the core
+stack is usable but a configured optional integration or external service
+failed. `failed` means a required integration did not converge. The latest
+machine-readable summaries live in `data/status/`, and the reconciler logs the
+same redacted summary in the Aspire dashboard.
+
+### Push notifications
+
+Arrspire supports an optional ntfy-compatible endpoint. Configure
+`ntfy-topic`, optionally `ntfy-token`, and `ntfy-endpoint` for a self-hosted
+server. The topic should be private and hard to guess; use a token when the
+server supports access control. The token and topic are secret parameters and
+remain Compose environment placeholders in review artifacts.
+
+The internal relay accepts events only on the Compose network. It sends a
+high-priority notification when required reconciliation fails, a warning when
+an optional integration needs attention, a recovery notification when the
+deployment returns to ready, and DIUN image-update notifications. Identical
+reconciliation outcomes are deduplicated in
+`data/status/notification-state.json`. Notification delivery failures appear as
+an optional `notification:ntfy` readiness failure without hiding the original
+reconciliation outcome. With no topic configured, the relay acknowledges
+events locally and sends nothing.
 
 After adding or correcting credentials:
 
@@ -156,6 +209,7 @@ docker run --rm qmcgaw/gluetun@<reviewed-digest> \
 | `duplicati-encryption-key` | Generated | Duplicati settings database | Must be backed up with Duplicati data; loss can make the backup configuration unrecoverable |
 | `duplicati-web-password` | Generated | Duplicati UI | Back up with Duplicati data |
 | `grafana-admin-password` | Generated | Initial Grafana administrator | Back up with the Grafana volume |
+| `ntfy-topic` / `ntfy-token` | Optional, externally managed | Push notification relay | Back up in a password manager; use an access-controlled or unguessable topic |
 | Subtitle-provider passwords | Optional, externally managed | Only the named provider | Back up in a password manager |
 | Arr/Bazarr/Seerr API keys | Generated by services | Cross-service reconciliation | Back up their configuration directories; never copy keys into diagnostics |
 
@@ -201,7 +255,7 @@ container logs are outside that filter; inspect them before sharing.
    secrets from the same backup point.
 3. Confirm paths are owned/writable by the configured host user.
 4. Deploy and run `npm run status`.
-5. If bootstrap is ready but reconciliation is degraded/failed, run
+5. If bootstrap is ready but reconciliation needs attention or failed, run
    `npm run repair`.
 6. Verify ingress authentication, Jellyfin login/libraries, qBittorrent
    categories, Arr download clients/root folders, Prowlarr applications,

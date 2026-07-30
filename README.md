@@ -14,7 +14,7 @@ Aspire 13.4.6.
 - Jellyfin, Seerr, Recyclarr
 - Duplicati, Tdarr, Diun
 - Traefik, Fail2ban
-- Prometheus, Grafana, and the Aspire dashboard
+- Homepage, Prometheus, Grafana, and the Aspire dashboard
 
 The bootstrap creates stable API keys and initial configuration files before
 services start. The reconciler then connects qBittorrent to the Arr apps,
@@ -32,14 +32,22 @@ and the latest stable Aspire CLI.
 cd src
 npm ci
 aspire restore --non-interactive
-aspire secret set "Parameters:vpn-wireguard-key" "<wireguard-private-key>"
+npm run setup
+npm run doctor
 npm run dev
 ```
 
-The VPN key is the only value without a safe default. Aspire generates and
-persists the administrative-ingress, Jellyfin, qBittorrent, Duplicati, and
-Grafana passwords in its secret store. Existing values under `~/.aspire` are
-reused automatically.
+The guided setup masks secret input, validates all answers before writing,
+persists service parameters in Aspire's local secret store, and saves only
+non-secret path choices in ignored `.arrspire/config.json`. The VPN key is the
+only value without a safe default. Aspire generates and persists the
+administrative-ingress, Jellyfin, qBittorrent, Duplicati, and Grafana passwords.
+Existing values under `~/.aspire` are reused automatically.
+
+`npm run doctor` is read-only. It checks the Node/Aspire/container runtime,
+Compose, VPN key shape, bind-mount permissions and capacity, socket, ingress
+ports, DNS, TLS, optional ntfy configuration, and persisted readiness. Each
+warning or failure includes the next corrective command.
 
 Runtime data defaults to `data/` in this repository, media to `~/media`, and
 downloads to `~/downloads`. Override them without editing the AppHost:
@@ -51,13 +59,22 @@ ARRSPIRE_DOWNLOADS_PATH=/srv/downloads \
 npm run dev
 ```
 
+Environment variables take precedence over `.arrspire/config.json`. For
+automation, protected `Parameters__*` variables and path overrides can drive
+the same validated workflow with `npm run setup -- --non-interactive`.
+
 For local development, override a parameter with
 `aspire secret set "Parameters:<name>" "<value>"`. For deployment, pass the
 same parameter as an environment variable using Aspire's configuration naming,
 for example `Parameters__timezone=UTC npm run deploy`. Useful names include
 `vpn-provider`, `vpn-countries`, `timezone`, `subtitle-languages`,
-`minimum-seeders`, and the supported subtitle-provider credentials. Dashes in
-parameter names become underscores in environment-variable names.
+`minimum-seeders`, `ntfy-endpoint`, `ntfy-topic`, `ntfy-token`, and the
+supported subtitle-provider credentials. Dashes in parameter names become
+underscores in environment-variable names.
+
+Always use `npm run deploy` for a live deployment. The project deployment
+pipeline refreshes unset `Parameters__*` values from the Aspire secret store;
+calling `aspire deploy` directly bypasses that protection.
 
 The default locale profile keeps the original Portuguese-oriented settings.
 Inspect the neutral baseline or apply it to the local Aspire secret store with:
@@ -69,8 +86,9 @@ npm run locale -- neutral --apply
 
 Every parameter, provider/country selection, WireGuard key, timezone, locale,
 subtitle list, and host path is validated before the application services are
-allowed to start. Missing optional subtitle credentials remain non-fatal; a
-partially supplied username/password pair is treated as a configuration error.
+allowed to start. Missing optional subtitle credentials are listed as not
+configured without lowering core readiness; a partially supplied
+username/password pair is treated as a configuration error.
 
 ## Access and readiness
 
@@ -91,6 +109,26 @@ credentials with:
 npm run status
 npm run repair
 ```
+
+The generated Homepage portal is available at the configured bare domain and
+at `home.<domain>`. It groups watch/request, library automation, download,
+processing, and operations surfaces; its Arr and qBittorrent widgets use
+root-only secret files generated during bootstrap. The portal has no direct
+host port and remains behind Arrspire ingress authentication.
+
+Push notifications are opt-in through any ntfy-compatible server. Set a
+private, hard-to-guess topic and optionally a bearer token:
+
+```bash
+aspire secret set "Parameters:ntfy-topic" "<private-topic>"
+aspire secret set "Parameters:ntfy-token" "<optional-access-token>"
+```
+
+Set `Parameters:ntfy-endpoint` when using a self-hosted server. Arrspire then
+notifies on reconciliation degradation, changed failures, recovery, and DIUN
+image updates. Repeated reconciliation runs with the same outcome are
+deduplicated. When no topic is configured, the relay remains a local no-op and
+does not lower readiness.
 
 For trusted local-browser HTTPS, generate a stable local certificate and add
 its CA to the current user's browser trust database, then restart the browser:
@@ -117,11 +155,13 @@ npm run deploy
 ```
 
 Create DNS-only records for the service hostnames (or a scoped wildcard such
-as `*.home.example.com`) pointing to the server's LAN address. The Cloudflare
-token needs only `Zone:Read` and `DNS:Edit` for the selected zone. The domain,
-email, token, server address, and ingress ports are deployment inputs; none are
-hardcoded into the ACME integration. Keep the token out of shell history and
-source control by supplying it through the Aspire secret store or a protected
+as `*.home.example.com`) pointing to the server's LAN address. When only the
+scoped wildcard exists, the deployment pipeline copies its A/AAAA target into
+the bare `home.example.com` record used by Homepage. The Cloudflare token needs
+only `Zone:Read` and `DNS:Edit` for the selected zone. The domain, email, token,
+server address, and ingress ports are deployment inputs; none are hardcoded
+into the ACME integration. Keep the token out of shell history and source
+control by supplying it through the Aspire secret store or a protected
 deployment environment.
 
 Local Aspire users can rerun the completed reconciler with
@@ -153,12 +193,17 @@ cd src
 npm run deploy
 ```
 
-This runs Aspire's native Docker Compose deployment pipeline, which builds the
-control plane, resolves deployment parameters into an environment-specific
-`.env` file, restricts generated files to the current user, selects Docker or
-Podman, and starts the stack. Bind-mount paths and deployment parameters are
-materialized automatically. In non-interactive environments, provide required
-parameters through `Parameters__*` environment variables.
+This runs Aspire's native Docker Compose deployment pipeline, which refreshes
+unset deployment parameters from the Aspire secret store, builds the control
+plane, resolves parameters into an environment-specific `.env` file, restricts
+generated files to the current user, selects Docker or Podman, and starts the
+stack. On Podman, it automatically recovers the known Gluetun namespace
+replacement conflict in project scope. Cloudflare ACME deployments reconcile
+the bare Homepage DNS record and wait for trusted TLS plus the expected
+unauthenticated/authenticated HTTP responses before succeeding. Bind-mount
+paths and deployment parameters are materialized automatically. In
+non-interactive environments, explicit `Parameters__*` variables continue to
+take precedence over saved secrets.
 
 To generate the artifact without starting it, run `npm run publish`. To stop a
 deployed stack without deleting its bind-mounted data or named volumes, run
@@ -190,10 +235,11 @@ Sonarr, Radarr, Lidarr, and Prowlarr cannot be accidentally interchanged while
 still exposing the underlying Aspire builder.
 
 The control plane under `src/control-plane/` is a small compiled TypeScript
-container with three commands:
+container with four commands:
 
 - `bootstrap` performs deterministic pre-start file setup.
 - `reconcile` waits for real APIs and converges cross-service settings.
+- `serve-notifications` deduplicates state transitions and relays ntfy events.
 - `verify` is the real-stack acceptance suite used by E2E tests.
 
 CI starts an isolated stack twice and complements the API acceptance checks

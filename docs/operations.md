@@ -54,7 +54,9 @@ inbound access.
 
 1. Choose a deployment-owned suffix such as `home.example.com`.
 2. In the matching Cloudflare zone, create DNS-only service records or a
-   scoped wildcard record pointing to the server's LAN address.
+   scoped wildcard record pointing to the server's LAN address. The deployment
+   pipeline creates the bare Homepage A/AAAA record from that scoped wildcard
+   when it is missing.
 3. Create a Cloudflare API token restricted to that zone with `Zone:Read` and
    `DNS:Edit`.
 4. Supply the following deployment parameters:
@@ -72,6 +74,13 @@ persists under `data/traefik/acme/`. Keep Cloudflare proxying disabled for
 private RFC1918 targets and do not forward ingress ports merely to satisfy
 certificate validation. Returning to `local` mode may require rerunning
 `npm run tls:local` for the selected domain.
+
+Use `npm run deploy`, not a direct `aspire deploy`, for live changes. The
+project pipeline hydrates unset deployment parameters from the latest Aspire
+secrets, recovers Podman's project-scoped Gluetun dependency conflict if it
+occurs, reconciles the bare Homepage DNS record in Cloudflare ACME mode, and
+waits for a publicly trusted certificate, HTTP 401 without credentials, and
+HTTP 200 with the configured ingress credentials.
 
 Direct service publication is an explicit diagnostic escape hatch:
 

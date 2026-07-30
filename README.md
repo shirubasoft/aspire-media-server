@@ -72,6 +72,10 @@ for example `Parameters__timezone=UTC npm run deploy`. Useful names include
 supported subtitle-provider credentials. Dashes in parameter names become
 underscores in environment-variable names.
 
+Always use `npm run deploy` for a live deployment. The project deployment
+pipeline refreshes unset `Parameters__*` values from the Aspire secret store;
+calling `aspire deploy` directly bypasses that protection.
+
 The default locale profile keeps the original Portuguese-oriented settings.
 Inspect the neutral baseline or apply it to the local Aspire secret store with:
 
@@ -151,11 +155,13 @@ npm run deploy
 ```
 
 Create DNS-only records for the service hostnames (or a scoped wildcard such
-as `*.home.example.com`) pointing to the server's LAN address. The Cloudflare
-token needs only `Zone:Read` and `DNS:Edit` for the selected zone. The domain,
-email, token, server address, and ingress ports are deployment inputs; none are
-hardcoded into the ACME integration. Keep the token out of shell history and
-source control by supplying it through the Aspire secret store or a protected
+as `*.home.example.com`) pointing to the server's LAN address. When only the
+scoped wildcard exists, the deployment pipeline copies its A/AAAA target into
+the bare `home.example.com` record used by Homepage. The Cloudflare token needs
+only `Zone:Read` and `DNS:Edit` for the selected zone. The domain, email, token,
+server address, and ingress ports are deployment inputs; none are hardcoded
+into the ACME integration. Keep the token out of shell history and source
+control by supplying it through the Aspire secret store or a protected
 deployment environment.
 
 Local Aspire users can rerun the completed reconciler with
@@ -187,12 +193,17 @@ cd src
 npm run deploy
 ```
 
-This runs Aspire's native Docker Compose deployment pipeline, which builds the
-control plane, resolves deployment parameters into an environment-specific
-`.env` file, restricts generated files to the current user, selects Docker or
-Podman, and starts the stack. Bind-mount paths and deployment parameters are
-materialized automatically. In non-interactive environments, provide required
-parameters through `Parameters__*` environment variables.
+This runs Aspire's native Docker Compose deployment pipeline, which refreshes
+unset deployment parameters from the Aspire secret store, builds the control
+plane, resolves parameters into an environment-specific `.env` file, restricts
+generated files to the current user, selects Docker or Podman, and starts the
+stack. On Podman, it automatically recovers the known Gluetun namespace
+replacement conflict in project scope. Cloudflare ACME deployments reconcile
+the bare Homepage DNS record and wait for trusted TLS plus the expected
+unauthenticated/authenticated HTTP responses before succeeding. Bind-mount
+paths and deployment parameters are materialized automatically. In
+non-interactive environments, explicit `Parameters__*` variables continue to
+take precedence over saved secrets.
 
 To generate the artifact without starting it, run `npm run publish`. To stop a
 deployed stack without deleting its bind-mounted data or named volumes, run

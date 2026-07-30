@@ -96,6 +96,8 @@ void test("repairs initialized Seerr service endpoints", async (context) => {
         request.method === "PUT" &&
         request.path === "/api/v1/settings/sonarr/11" &&
         request.body.hostname === "127.0.0.1" &&
+        request.body.port === address.port &&
+        request.body.useSsl === false &&
         request.body.animeSeriesType === "anime" &&
         request.body.activeAnimeProfileId === 7 &&
         request.body.activeAnimeProfileName === "[Anime] Remux-1080p" &&
@@ -110,6 +112,8 @@ void test("repairs initialized Seerr service endpoints", async (context) => {
         request.method === "PUT" &&
         request.path === "/api/v1/settings/radarr/22" &&
         request.body.hostname === "127.0.0.1" &&
+        request.body.port === address.port &&
+        request.body.useSsl === false &&
         request.body.externalUrl ===
           "https://radarr.example.test:9443",
     ),

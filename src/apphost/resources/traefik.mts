@@ -10,6 +10,7 @@ import {
   type ArrspireResource,
   type ResourceContext,
 } from "./resource.mjs";
+import type { AutheliaResource } from "./authelia.mjs";
 
 export type TraefikResource = ArrspireResource<"traefik"> &
   Readonly<{
@@ -20,6 +21,7 @@ export type TraefikResource = ArrspireResource<"traefik"> &
 
 export function addTraefik(
   context: ResourceContext,
+  authelia: AutheliaResource,
 ): TraefikResource {
   const ingressPorts = resolveIngressPorts(context.paths.rootlessPodman);
   const resource = context.builder
@@ -85,6 +87,7 @@ export function addTraefik(
       join(context.paths.data, "traefik", "logs"),
       "/var/log/traefik",
     )
+    .waitFor(authelia.resource)
     .withEndpoint({
       name: "http",
       scheme: "http",

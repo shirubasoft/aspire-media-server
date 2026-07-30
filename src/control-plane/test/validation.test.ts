@@ -17,9 +17,11 @@ function validEnvironment(): NodeJS.ProcessEnv {
     SUBTITLE_LANGUAGES: "pt-BR,en",
     MINIMUM_SEEDERS: "1",
     USE_ORIGINAL_TITLE: "false",
-    TRAEFIK_DOMAIN: "localhost",
+    TRAEFIK_DOMAIN: "192.168.0.15.nip.io",
     INGRESS_ADMIN_USER: "admin",
     INGRESS_ADMIN_PASSWORD: "not-logged-anywhere",
+    AUTHELIA_SESSION_SECRET: "s".repeat(64),
+    AUTHELIA_STORAGE_ENCRYPTION_KEY: "e".repeat(64),
   };
 }
 
@@ -118,9 +120,10 @@ void test("requires complete Cloudflare ACME configuration only in public TLS mo
     () =>
       validateConfiguration({
         ...validEnvironment(),
+        TRAEFIK_DOMAIN: "localhost",
         TRAEFIK_TLS_MODE: "cloudflare-acme",
       }),
-    /publicly registered domain/u,
+    /fully qualified lowercase domain/u,
   );
 
   const publicTls = {

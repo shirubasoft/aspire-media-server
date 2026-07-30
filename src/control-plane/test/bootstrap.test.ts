@@ -2,12 +2,17 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  autheliaConfiguration,
+  autheliaPasswordDigest,
+  autheliaUsersDatabase,
   fail2banFilter,
   homepageServices,
   homepageSettings,
   runtimeDirectoryPlan,
   traefikDynamicConfiguration,
 } from "../src/bootstrap.js";
+
+const autheliaUrl = "http://authelia:9091";
 
 void test("runtime media and download directories belong to the service user", () => {
   assert.deepEqual(runtimeDirectoryPlan(), [
@@ -40,8 +45,7 @@ void test("protects and routes the network-only Aspire dashboard", () => {
         authentication: "ingress",
       },
     },
-    "operator",
-    "secret",
+    autheliaUrl,
   );
 
   assert.match(
@@ -66,8 +70,7 @@ void test("uses the ACME resolver only when public TLS is enabled", () => {
         authentication: "service",
       },
     },
-    "operator",
-    "secret",
+    autheliaUrl,
     "cloudflare-acme",
   );
 
@@ -90,8 +93,7 @@ void test("lets Duplicati use its own Bearer authentication", () => {
         authentication: "service",
       },
     },
-    "operator",
-    "secret",
+    autheliaUrl,
   );
 
   assert.match(
@@ -115,8 +117,7 @@ void test("keeps the legacy Jellyseerr hostname as a Seerr alias", () => {
         aliases: ["jellyseerr"],
       },
     },
-    "operator",
-    "secret",
+    autheliaUrl,
   );
 
   assert.match(
@@ -136,8 +137,7 @@ void test("routes the bare domain and home alias to the protected portal", () =>
         hosts: ["home.example.com", "home.home.example.com"],
       },
     },
-    "operator",
-    "secret",
+    autheliaUrl,
   );
 
   assert.match(
@@ -148,6 +148,74 @@ void test("routes the bare domain and home alias to the protected portal", () =>
     configuration,
     /homepage:\n[\s\S]*?middlewares: \[admin-auth\]/u,
   );
+});
+
+void test("delegates administrative authentication to Authelia", () => {
+  const configuration = traefikDynamicConfiguration(
+    "home.example.com",
+    {
+      auth: {
+        url: autheliaUrl,
+        authentication: "identity",
+      },
+      homepage: {
+        url: "http://homepage:3000",
+        authentication: "ingress",
+      },
+    },
+    autheliaUrl,
+  );
+
+  assert.match(
+    configuration,
+    /forwardAuth:\n        address: "http:\/\/authelia:9091\/api\/authz\/forward-auth"/u,
+  );
+  assert.match(configuration, /maxResponseBodySize: 8192/u);
+  assert.match(configuration, /authResponseHeaders:/u);
+  const authRouter = configuration.match(
+    /    auth:\n(?<configuration>(?:      .*\n)+)\n/u,
+  );
+  assert.ok(authRouter?.groups?.configuration);
+  assert.doesNotMatch(authRouter.groups.configuration, /admin-auth/u);
+  assert.doesNotMatch(configuration, /basicAuth/u);
+});
+
+void test("generates stable Authelia credentials and shared-domain sessions", () => {
+  const first = autheliaPasswordDigest("correct horse", "stable salt source");
+  const second = autheliaPasswordDigest("correct horse", "stable salt source");
+  assert.equal(first, second);
+  assert.match(
+    first,
+    /^\$scrypt\$ln=16,r=8,p=1\$[A-Za-z0-9+/]+\$[A-Za-z0-9+/]+$/u,
+  );
+  assert.notEqual(
+    first,
+    autheliaPasswordDigest("different password", "stable salt source"),
+  );
+
+  const users = autheliaUsersDatabase(
+    "operator",
+    "correct horse",
+    "s".repeat(64),
+    "home.example.com",
+  );
+  assert.match(users, /"operator":/u);
+  assert.match(users, /password: "\$scrypt\$/u);
+  assert.doesNotMatch(users, /correct horse/u);
+
+  const configuration = autheliaConfiguration("home.example.com", 8443);
+  assert.match(configuration, /domain: "home\.example\.com"/u);
+  assert.match(
+    configuration,
+    /authelia_url: "https:\/\/auth\.home\.example\.com:8443"/u,
+  );
+  assert.match(
+    configuration,
+    /default_redirection_url: "https:\/\/home\.example\.com:8443"/u,
+  );
+  assert.match(configuration, /policy: one_factor/u);
+  assert.doesNotMatch(configuration, /secret:/u);
+  assert.doesNotMatch(configuration, /encryption_key:/u);
 });
 
 void test("generates a secure, useful Homepage configuration", () => {

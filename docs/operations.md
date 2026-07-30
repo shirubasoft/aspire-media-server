@@ -23,11 +23,17 @@ default (`80` and `443`, or `8080` and `8443` when rootless Podman is
 detected). Set `ARRSPIRE_INGRESS_HTTP_PORT` and
 `ARRSPIRE_INGRESS_HTTPS_PORT` to override the host ports. The access handoff
 includes a nonstandard HTTPS port automatically. HTTP redirects to HTTPS.
-Administrative routes use a
-Traefik BasicAuth middleware backed by the generated
-`Parameters:ingress-admin-user` and `Parameters:ingress-admin-password`
-values. Jellyfin and Seerr use their own application login so media
-clients are not forced through a second authentication scheme.
+Administrative routes use a Traefik ForwardAuth middleware backed by Authelia
+and the generated `Parameters:ingress-admin-user` and
+`Parameters:ingress-admin-password` values. The first protected route redirects
+to `auth.<domain>`; a successful form login creates one parent-domain session
+cookie shared by all protected subdomains. This requires a fully qualified
+domain such as the checked-in `server-address.nip.io` form; `localhost` cannot
+hold the required cookie. Jellyfin and Seerr use their own application login so
+media clients are not forced through a second authentication scheme. Duplicati
+also remains service-authenticated because its Bearer API authentication must
+not be consumed by ingress middleware. qBittorrent and Grafana retain an
+additional application login.
 
 Traefik uses its generated default certificate until the operator installs a
 trusted certificate in `data/traefik/dynamic/`. Treat the default as suitable
@@ -79,8 +85,8 @@ Use `npm run deploy`, not a direct `aspire deploy`, for live changes. The
 project pipeline hydrates unset deployment parameters from the latest Aspire
 secrets, recovers Podman's project-scoped Gluetun dependency conflict if it
 occurs, reconciles the bare Homepage DNS record in Cloudflare ACME mode, and
-waits for a publicly trusted certificate, HTTP 401 without credentials, and
-HTTP 200 with the configured ingress credentials.
+waits for a publicly trusted certificate, the expected redirect to
+`auth.<domain>`, and a healthy sign-in portal.
 
 Direct service publication is an explicit diagnostic escape hatch:
 
@@ -97,10 +103,11 @@ prints it again without revealing secret values. Representative output:
 
 ```text
 Arrspire access (HTTPS)
-Arrspire home     https://home.192.168.0.15.nip.io:8443           Arrspire ingress credentials
+Arrspire sign-in  https://auth.192.168.0.15.nip.io:8443           Arrspire sign-in credentials
+Arrspire home     https://home.192.168.0.15.nip.io:8443           Arrspire sign-in
 Jellyfin          https://jellyfin.192.168.0.15.nip.io:8443       Service credentials
-Sonarr            https://sonarr.192.168.0.15.nip.io:8443         Arrspire ingress credentials
-Traefik dashboard https://traefik.192.168.0.15.nip.io:8443        Arrspire ingress credentials
+Sonarr            https://sonarr.192.168.0.15.nip.io:8443         Arrspire sign-in
+Traefik dashboard https://traefik.192.168.0.15.nip.io:8443        Arrspire sign-in
 
 Readiness
 bootstrap         ready
@@ -116,7 +123,7 @@ subtitle-provider:OpenSubtitles.org  credentials were not supplied
 The same portal is routed from the configured bare domain. Homepage reads
 service API keys from mode-`0600` files under `data/homepage/secrets/`; its
 generated YAML contains only file references. Keep the portal behind the
-administrative ingress boundary.
+central sign-in boundary.
 
 The checked-in default targets the current server at
 `192.168.0.15.nip.io`. Override it with
@@ -203,7 +210,9 @@ docker run --rm qmcgaw/gluetun@<reviewed-digest> \
 | --- | --- | --- | --- |
 | `vpn-wireguard-key` | Required, externally managed | Gluetun tunnel | Back up in a password manager |
 | `cloudflare-dns-api-token` | Required only for `cloudflare-acme` TLS | Traefik DNS-01 renewal | Store in a password manager; scope to `Zone:Read` and `DNS:Edit` for one zone |
-| `ingress-admin-password` | Generated | Traefik administrative routes | Back up with the Aspire store/deployment environment |
+| `ingress-admin-password` | Generated | Authelia login for protected Traefik routes | Back up with the Aspire store/deployment environment |
+| `authelia-session-secret` | Generated | Encrypts shared browser sessions | Back up with the Aspire store/deployment environment; rotation signs out every browser |
+| `authelia-storage-encryption-key` | Generated | Encrypts sensitive Authelia database values | Must be backed up with `data/authelia`; loss can make stored authentication state unrecoverable |
 | `jellyfin-admin-password` | Generated | Jellyfin and Seerr setup | Back up with Jellyfin data |
 | `qbittorrent-password` | Generated | qBittorrent and Arr clients | Back up with qBittorrent/Arr data |
 | `duplicati-encryption-key` | Generated | Duplicati settings database | Must be backed up with Duplicati data; loss can make the backup configuration unrecoverable |
@@ -225,9 +234,12 @@ Take a verified data and secret-store backup first. Rotate one credential at a
 time and run `npm run repair` (or restart the local reconciler) after each
 change.
 
-- **Ingress:** set new `Parameters:ingress-admin-user` and
-  `Parameters:ingress-admin-password` values, rerun bootstrap by restarting the
-  stack, then verify an unauthenticated administrative request returns `401`.
+- **Arrspire sign-in:** set new `Parameters:ingress-admin-user` and
+  `Parameters:ingress-admin-password` values, then redeploy so bootstrap
+  rewrites Authelia's hashed user database. Verify in a private browser window
+  that a protected route redirects to `auth.<domain>` and accepts the new
+  credentials. Existing Authelia sessions remain valid until they expire or
+  the session secret is deliberately rotated.
 - **qBittorrent:** change the password in qBittorrent, update
   `Parameters:qbittorrent-password`, run repair, and verify Sonarr/Radarr/Lidarr
   download clients. Preserve the matching parameter because the bootstrap file
@@ -257,9 +269,10 @@ container logs are outside that filter; inspect them before sharing.
 4. Deploy and run `npm run status`.
 5. If bootstrap is ready but reconciliation needs attention or failed, run
    `npm run repair`.
-6. Verify ingress authentication, Jellyfin login/libraries, qBittorrent
-   categories, Arr download clients/root folders, Prowlarr applications,
-   Bazarr providers, Seerr defaults, Duplicati access, and Grafana access.
+6. Verify the Authelia redirect and one-login protected-route session,
+   Jellyfin login/libraries, qBittorrent categories, Arr download clients/root
+   folders, Prowlarr applications, Bazarr providers, Seerr defaults, Duplicati
+   access, and Grafana access.
 7. Keep the previous backup until a representative media read and backup
    restore both succeed.
 

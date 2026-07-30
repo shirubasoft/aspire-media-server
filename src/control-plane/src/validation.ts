@@ -156,13 +156,12 @@ export function validateConfiguration(environment: NodeJS.ProcessEnv): void {
 
   const domain = requireValue(environment, "TRAEFIK_DOMAIN");
   if (
-    domain !== "localhost" &&
     !/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/u.test(
       domain,
     )
   ) {
     throw new Error(
-      `TRAEFIK_DOMAIN must be localhost or a fully qualified lowercase domain; received ${domain}`,
+      `TRAEFIK_DOMAIN must be a fully qualified lowercase domain so the shared sign-in cookie is valid; received ${domain}`,
     );
   }
   validateTraefikTlsConfiguration(environment, domain);
@@ -176,6 +175,14 @@ export function validateConfiguration(environment: NodeJS.ProcessEnv): void {
     );
   }
   requireValue(environment, "INGRESS_ADMIN_PASSWORD");
+  for (const name of [
+    "AUTHELIA_SESSION_SECRET",
+    "AUTHELIA_STORAGE_ENCRYPTION_KEY",
+  ]) {
+    if (requireValue(environment, name).length < 64) {
+      throw new Error(`${name} must be at least 64 characters`);
+    }
+  }
   validateOptionalCredentials(environment);
 }
 

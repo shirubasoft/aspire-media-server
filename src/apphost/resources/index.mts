@@ -2,6 +2,7 @@ export {
   addAcceptance,
   type AcceptanceResource,
 } from "./acceptance.mjs";
+export { addAuthelia, type AutheliaResource } from "./authelia.mjs";
 export { addBazarr, type BazarrResource } from "./bazarr.mjs";
 export { addBootstrap, type BootstrapResource } from "./bootstrap.mjs";
 export { addDiun, type DiunResource } from "./diun.mjs";

@@ -1,4 +1,9 @@
-import { createHash, pbkdf2Sync, randomBytes } from "node:crypto";
+import {
+  createHash,
+  pbkdf2Sync,
+  randomBytes,
+  scryptSync,
+} from "node:crypto";
 import { chown, lchown, lstat, mkdir, opendir } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -22,6 +27,8 @@ import {
 import { validateConfiguration } from "./validation.js";
 
 const dataDirectories = [
+  "authelia/config",
+  "authelia/secrets",
   "backups",
   "bazarr",
   "diun",
@@ -177,6 +184,10 @@ function routedServices(
   domain: string,
 ): Readonly<Record<string, RoutedService>> {
   return {
+    auth: {
+      url: required("AUTH_URL"),
+      authentication: serviceSurface("auth").authentication,
+    },
     aspire: {
       url: optional(
         "ASPIRE_DASHBOARD_URL",
@@ -190,9 +201,9 @@ function routedServices(
     },
     duplicati: {
       url: required("DUPLICATI_URL"),
-      // Duplicati authenticates API calls with a Bearer token. Applying
-      // Traefik BasicAuth here would consume the same Authorization header
-      // and make the web UI fail immediately after a successful login.
+      // Duplicati authenticates API calls with a Bearer token. Keep those
+      // requests out of the ingress authorization flow so Authelia never
+      // interprets or replaces the service's Authorization header.
       authentication: serviceSurface("duplicati").authentication,
     },
     grafana: {
@@ -247,8 +258,7 @@ function routedServices(
 export function traefikDynamicConfiguration(
   domain: string,
   services: Readonly<Record<string, RoutedService>>,
-  ingressUser: string,
-  ingressPassword: string,
+  autheliaUrl: string,
   tlsMode: TraefikTlsMode = "local",
 ): string {
   const routerLines: string[] = [];
@@ -280,20 +290,119 @@ ${requiresIngressAuthentication(service.authentication) ? "      middlewares: [a
       service: api@internal
       middlewares: [admin-auth]
 ${tlsConfiguration}`);
-  const passwordHash = createHash("sha1")
-    .update(ingressPassword)
-    .digest("base64");
+  const authorizationEndpoint = new URL(
+    "/api/authz/forward-auth",
+    `${autheliaUrl.replace(/\/+$/u, "")}/`,
+  ).toString();
   return `http:
   middlewares:
     admin-auth:
-      basicAuth:
-        removeHeader: true
-        users:
-          - "${ingressUser}:{SHA}${passwordHash}"
+      forwardAuth:
+        address: ${yamlString(authorizationEndpoint)}
+        trustForwardHeader: true
+        maxResponseBodySize: 8192
+        authResponseHeaders:
+          - Remote-User
+          - Remote-Groups
+          - Remote-Email
+          - Remote-Name
   routers:
 ${routerLines.join("\n")}
   services:
 ${serviceLines.join("\n")}
+`;
+}
+
+export function autheliaPasswordDigest(
+  password: string,
+  saltSource: string,
+): string {
+  const iterations = 16;
+  const blockSize = 8;
+  const parallelism = 1;
+  const cost = 2 ** iterations;
+  const salt = createHash("sha256")
+    .update("arrspire-authelia-password\u0000")
+    .update(saltSource)
+    .digest()
+    .subarray(0, 16);
+  const digest = scryptSync(password, salt, 32, {
+    N: cost,
+    r: blockSize,
+    p: parallelism,
+    maxmem: 128 * cost * blockSize + 2 * 1024 * 1024,
+  });
+  const encode = (value: Buffer): string =>
+    value.toString("base64").replace(/=+$/u, "");
+  return `$scrypt$ln=${String(iterations)},r=${String(blockSize)},p=${String(parallelism)}$${encode(salt)}$${encode(digest)}`;
+}
+
+export function autheliaUsersDatabase(
+  username: string,
+  password: string,
+  sessionSecret: string,
+  domain: string,
+): string {
+  return `users:
+  ${yamlString(username)}:
+    disabled: false
+    displayname: "Arrspire Administrator"
+    password: ${yamlString(
+      autheliaPasswordDigest(password, `${sessionSecret}\u0000${username}`),
+    )}
+    email: ${yamlString(`arrspire@${domain}`)}
+    groups:
+      - admins
+`;
+}
+
+export function autheliaConfiguration(
+  domain: string,
+  httpsPort: number,
+): string {
+  return `theme: auto
+server:
+  address: "tcp://:9091/"
+  endpoints:
+    authz:
+      forward-auth:
+        implementation: ForwardAuth
+log:
+  level: info
+  format: text
+authentication_backend:
+  password_reset:
+    disable: true
+  password_change:
+    disable: true
+  file:
+    path: /config/users_database.yml
+    watch: false
+access_control:
+  default_policy: deny
+  rules:
+    - domain:
+        - ${yamlString(domain)}
+        - ${yamlString(`*.${domain}`)}
+      policy: one_factor
+session:
+  name: arrspire_session
+  same_site: lax
+  inactivity: 1h
+  expiration: 12h
+  remember_me: 1M
+  cookies:
+    - domain: ${yamlString(domain)}
+      authelia_url: ${yamlString(externalServiceUrl("auth", domain, httpsPort))}
+      default_redirection_url: ${yamlString(
+        externalRootUrl(domain, httpsPort),
+      )}
+storage:
+  local:
+    path: /config/db.sqlite3
+notifier:
+  filesystem:
+    filename: /config/notification.txt
 `;
 }
 
@@ -346,6 +455,11 @@ function externalServiceUrl(
 ): string {
   const port = httpsPort === 443 ? "" : `:${String(httpsPort)}`;
   return `https://${service}.${domain}${port}`;
+}
+
+function externalRootUrl(domain: string, httpsPort: number): string {
+  const port = httpsPort === 443 ? "" : `:${String(httpsPort)}`;
+  return `https://${domain}${port}`;
 }
 
 interface HomepageService {
@@ -550,14 +664,39 @@ export async function bootstrap(): Promise<void> {
   const tlsMode = resolveTraefikTlsMode(process.env);
   const ingressUser = required("INGRESS_ADMIN_USER");
   const ingressPassword = required("INGRESS_ADMIN_PASSWORD");
+  const autheliaSessionSecret = required("AUTHELIA_SESSION_SECRET");
+  const autheliaStorageEncryptionKey = required(
+    "AUTHELIA_STORAGE_ENCRYPTION_KEY",
+  );
   await Promise.all([
+    writeIfChanged(
+      "/data/authelia/config/configuration.yml",
+      autheliaConfiguration(domain, httpsPort),
+      0o644,
+    ),
+    writeIfChanged(
+      "/data/authelia/config/users_database.yml",
+      autheliaUsersDatabase(
+        ingressUser,
+        ingressPassword,
+        autheliaSessionSecret,
+        domain,
+      ),
+    ),
+    writeIfChanged(
+      "/data/authelia/secrets/session-secret",
+      autheliaSessionSecret,
+    ),
+    writeIfChanged(
+      "/data/authelia/secrets/storage-encryption-key",
+      autheliaStorageEncryptionKey,
+    ),
     writeIfChanged(
       "/data/traefik/dynamic/services.yml",
       traefikDynamicConfiguration(
         domain,
         services,
-        ingressUser,
-        ingressPassword,
+        required("AUTH_URL"),
         tlsMode,
       ),
       0o644,

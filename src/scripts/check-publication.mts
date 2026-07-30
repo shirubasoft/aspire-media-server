@@ -71,6 +71,16 @@ assert.match(
 );
 assert.match(
   compose,
+  /authelia:[\s\S]*?AUTHELIA_SESSION_SECRET_FILE: "\/secrets\/session-secret"/u,
+  "Authelia must read its session secret from a mounted file",
+);
+assert.match(
+  compose,
+  /authelia:[\s\S]*?AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE: "\/secrets\/storage-encryption-key"/u,
+  "Authelia must read its storage encryption key from a mounted file",
+);
+assert.match(
+  compose,
   /homepage:[\s\S]*?HOMEPAGE_ALLOWED_HOSTS: "\$\{TRAEFIK_DOMAIN\},home\.\$\{TRAEFIK_DOMAIN\},/u,
   "Homepage must restrict requests to the generated ingress hostnames",
 );

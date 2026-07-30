@@ -16,14 +16,19 @@ void test("defines each external service surface exactly once", () => {
 });
 
 void test("describes service and layered authentication accurately", () => {
+  assert.equal(serviceSurface("auth").authentication, "identity");
+  assert.equal(
+    authenticationDescription(serviceSurface("auth").authentication),
+    "Arrspire sign-in credentials",
+  );
   assert.equal(serviceSurface("duplicati").authentication, "service");
   assert.equal(
     authenticationDescription(serviceSurface("qbittorrent").authentication),
-    "Ingress + service credentials",
+    "Arrspire sign-in + service credentials",
   );
   assert.equal(
     authenticationDescription(serviceSurface("grafana").authentication),
-    "Ingress + service credentials",
+    "Arrspire sign-in + service credentials",
   );
   assert.equal(
     requiresIngressAuthentication(
@@ -34,5 +39,9 @@ void test("describes service and layered authentication accurately", () => {
   assert.equal(
     requiresIngressAuthentication(serviceSurface("sonarr").authentication),
     true,
+  );
+  assert.equal(
+    requiresIngressAuthentication(serviceSurface("auth").authentication),
+    false,
   );
 });

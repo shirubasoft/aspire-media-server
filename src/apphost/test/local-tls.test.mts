@@ -32,6 +32,15 @@ void test(
         `jellyfin.${defaultTraefikDomain}`,
       ]);
       assert.match(stdout, /does match certificate/u);
+      const auth = await execute("openssl", [
+        "x509",
+        "-in",
+        assets.certificate,
+        "-noout",
+        "-checkhost",
+        `auth.${defaultTraefikDomain}`,
+      ]);
+      assert.match(auth.stdout, /does match certificate/u);
       assert.match(
         await readFile(assets.traefikConfiguration, "utf8"),
         /defaultCertificate:[\s\S]*arrspire-local\.crt[\s\S]*arrspire-local\.key/u,

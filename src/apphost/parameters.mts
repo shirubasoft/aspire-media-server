@@ -26,6 +26,8 @@ export interface ArrspireParameters {
   readonly cloudflareDnsApiToken: ParameterResourcePromise;
   readonly ingressAdminUser: ParameterResourcePromise;
   readonly ingressAdminPassword: ParameterResourcePromise;
+  readonly autheliaSessionSecret: ParameterResourcePromise;
+  readonly autheliaStorageEncryptionKey: ParameterResourcePromise;
   readonly ntfyEndpoint: ParameterResourcePromise;
   readonly ntfyTopic: ParameterResourcePromise;
   readonly ntfyToken: ParameterResourcePromise;
@@ -153,6 +155,16 @@ export function addArrspireParameters(
     ingressAdminPassword: builder.addParameterWithGeneratedValue(
       "ingress-admin-password",
       generatedSecret,
+      { secret: true, persist: true },
+    ),
+    autheliaSessionSecret: builder.addParameterWithGeneratedValue(
+      "authelia-session-secret",
+      { ...generatedSecret, minLength: 64 },
+      { secret: true, persist: true },
+    ),
+    autheliaStorageEncryptionKey: builder.addParameterWithGeneratedValue(
+      "authelia-storage-encryption-key",
+      { ...generatedSecret, minLength: 64 },
       { secret: true, persist: true },
     ),
     ntfyEndpoint: builder.addParameter("ntfy-endpoint", {

@@ -179,9 +179,10 @@ async function verifyAspireDashboard(
       }),
     ),
   );
-  assert.ok(
-    (await page.title()).toLowerCase().includes("resources"),
-    `Aspire dashboard rendered an unexpected title: ${await page.title()}`,
+  await page.waitForFunction(
+    () => document.title.toLowerCase().includes("resources"),
+    undefined,
+    { timeout: 30_000 },
   );
 }
 

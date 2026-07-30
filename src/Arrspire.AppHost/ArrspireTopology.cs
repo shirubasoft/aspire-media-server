@@ -49,13 +49,14 @@ internal static class ArrspireTopologyBuilder
         var fail2ban = InfrastructureResources.AddFail2ban(context, traefik);
         var prometheus = InfrastructureResources.AddPrometheus(context);
         var grafana = InfrastructureResources.AddGrafana(context, prometheus);
-        var homepage = InfrastructureResources.AddHomepage(context);
+        var homepage = InfrastructureResources.AddHomepage(context, traefik.PublicHttps);
         var notifier = ControlPlaneResources.AddNotifier(context, homepage);
         var diun = ControlPlaneResources.AddDiun(context, notifier);
 
         var endpoints = new ControlPlaneEndpoints(
             gluetun.HttpProxy,
             traefik.Https,
+            traefik.PublicHttps,
             notifier.Http,
             sonarr.Http,
             radarr.Http,

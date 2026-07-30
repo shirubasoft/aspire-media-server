@@ -5,6 +5,7 @@ namespace Arrspire.AppHost.Resources;
 internal sealed record ControlPlaneEndpoints(
     EndpointReference GluetunProxy,
     EndpointReference Ingress,
+    EndpointReference PublicIngress,
     EndpointReference Notifier,
     EndpointReference Sonarr,
     EndpointReference Radarr,
@@ -72,7 +73,6 @@ internal static class ControlPlaneResources
         ArrspireContext context,
         ControlPlaneEndpoints endpoints)
     {
-        var ports = Ingress.ResolvePorts(context.Paths.RootlessPodman);
         var resource = WithEndpointEnvironment(
             context,
             AddControlPlane(context, "bootstrap", "bootstrap")
@@ -81,7 +81,6 @@ internal static class ControlPlaneResources
                     context.Parameters.QBittorrentPassword)
                 .WithEnvironment("TRAEFIK_DOMAIN", context.Parameters.TraefikDomain)
                 .WithEnvironment("TRAEFIK_TLS_MODE", context.Parameters.TraefikTlsMode)
-                .WithEnvironment("TRAEFIK_HTTPS_PORT", ports.Https.ToString())
                 .WithEnvironment("TRAEFIK_ACME_EMAIL", context.Parameters.TraefikAcmeEmail)
                 .WithEnvironment(
                     "CF_DNS_API_TOKEN",
@@ -114,6 +113,10 @@ internal static class ControlPlaneResources
                 .WithEnvironment("MINIMUM_SEEDERS", context.Parameters.MinimumSeeders)
                 .WithOptionalProviderEnvironment(context),
             endpoints)
+            .WithPublicIngressPort(
+                context,
+                endpoints,
+                "TRAEFIK_HTTPS_PORT")
             .WithHiddenOnCompletion();
         return resource.Handle("bootstrap");
     }
@@ -249,12 +252,31 @@ internal static class ControlPlaneResources
             resource.WithEnvironment(name, endpoint);
         }
 
-        var ports = Ingress.ResolvePorts(context.Paths.RootlessPodman);
         resource
             .WithEnvironment("TRAEFIK_DOMAIN", context.Parameters.TraefikDomain)
-            .WithEnvironment("INGRESS_HTTPS_PORT", ports.Https.ToString());
+            .WithPublicIngressPort(
+                context,
+                endpoints,
+                "INGRESS_HTTPS_PORT");
         return resource;
     }
+
+    private static IResourceBuilder<ContainerResource> WithPublicIngressPort(
+        this IResourceBuilder<ContainerResource> resource,
+        ArrspireContext context,
+        ControlPlaneEndpoints endpoints,
+        string environmentName)
+        => resource.WithEnvironment(async environment =>
+        {
+            var httpsPort = context.IsRunMode
+                ? await endpoints.PublicIngress
+                    .Property(EndpointProperty.Port)
+                    .GetValueAsync(environment.CancellationToken)
+                    ?? throw new InvalidOperationException(
+                        "Ingress HTTPS endpoint port was not allocated")
+                : Ingress.ResolvePorts(context.Paths.RootlessPodman).Https.ToString();
+            environment.EnvironmentVariables[environmentName] = httpsPort;
+        });
 
     private static IResourceBuilder<ContainerResource> WithOptionalProviderEnvironment(
         this IResourceBuilder<ContainerResource> resource,

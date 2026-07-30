@@ -50,6 +50,7 @@ internal sealed record TraefikHandle(
     IResourceBuilder<ContainerResource> Container,
     EndpointReference Http,
     EndpointReference Https,
+    EndpointReference PublicHttps,
     EndpointReference Dashboard);
 
 internal static class ResourceHandleExtensions

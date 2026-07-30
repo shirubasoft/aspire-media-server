@@ -39,9 +39,6 @@ internal static class InfrastructureResources
             .WithEnvironment("TRAEFIK_ENTRYPOINTS_WEB_ADDRESS", ":80")
             .WithEnvironment("TRAEFIK_ENTRYPOINTS_WEBSECURE_ADDRESS", ":443")
             .WithEnvironment(
-                "TRAEFIK_ENTRYPOINTS_WEB_HTTP_REDIRECTIONS_ENTRYPOINT_TO",
-                Ingress.TraefikHttpsRedirectTarget(ports.Https))
-            .WithEnvironment(
                 "TRAEFIK_ENTRYPOINTS_WEB_HTTP_REDIRECTIONS_ENTRYPOINT_SCHEME",
                 "https")
             .WithEnvironment(
@@ -69,18 +66,6 @@ internal static class InfrastructureResources
                 "TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_DNSCHALLENGE_RESOLVERS",
                 "1.1.1.1:53,8.8.8.8:53")
             .WithEnvironment("CF_DNS_API_TOKEN", context.Parameters.CloudflareDnsApiToken)
-            .WithContainerFiles(
-                "/etc/traefik",
-                (_, _) => Task.FromResult<IEnumerable<ContainerFileSystemItem>>(
-                [
-                    new ContainerFile
-                    {
-                        Name = "traefik.yml",
-                        Contents = TraefikStaticConfiguration(ports),
-                        Mode = UnixFileMode.UserRead | UnixFileMode.UserWrite
-                            | UnixFileMode.GroupRead | UnixFileMode.OtherRead,
-                    },
-                ]))
             .WithBindMount(
                 Path.Combine(context.Paths.Data, "traefik", "dynamic"),
                 "/etc/traefik/dynamic",
@@ -110,13 +95,43 @@ internal static class InfrastructureResources
                 name: "dashboard",
                 isExternal: false)
             .WithHttpHealthCheck("/ping", endpointName: "dashboard");
-        resource.WithComposeRestart();
+        var publicHttps = resource.GetEndpoint(
+            "https",
+            KnownNetworkIdentifiers.LocalhostNetwork);
+        resource
+            .WithEnvironment(async environment =>
+            {
+                var httpsPort = context.IsRunMode
+                    ? await publicHttps
+                        .Property(EndpointProperty.Port)
+                        .GetValueAsync(environment.CancellationToken)
+                        ?? throw new InvalidOperationException(
+                            "Traefik HTTPS endpoint port was not allocated")
+                    : ports.Https.ToString();
+                environment.EnvironmentVariables[
+                    "TRAEFIK_ENTRYPOINTS_WEB_HTTP_REDIRECTIONS_ENTRYPOINT_TO"] =
+                    $":{httpsPort}";
+            })
+            .WithContainerFiles(
+                "/etc/traefik",
+                (_, _) => Task.FromResult<IEnumerable<ContainerFileSystemItem>>(
+                [
+                    new ContainerFile
+                    {
+                        Name = "traefik.yml",
+                        Contents = TraefikStaticConfiguration(),
+                        Mode = UnixFileMode.UserRead | UnixFileMode.UserWrite
+                            | UnixFileMode.GroupRead | UnixFileMode.OtherRead,
+                    },
+                ]))
+            .WithComposeRestart();
 
         return new TraefikHandle(
             resource.AsResource(),
             resource,
             resource.GetEndpoint("http"),
             resource.GetEndpoint("https"),
+            publicHttps,
             resource.GetEndpoint("dashboard"));
     }
 
@@ -179,9 +194,11 @@ internal static class InfrastructureResources
         return resource.HttpHandle("grafana");
     }
 
-    public static HttpResourceHandle AddHomepage(ArrspireContext context)
+    public static HttpResourceHandle AddHomepage(
+        ArrspireContext context,
+        EndpointReference ingress)
     {
-        var httpsPort = Ingress.ResolvePorts(context.Paths.RootlessPodman).Https;
+        var configuredHttpsPort = Ingress.ResolvePorts(context.Paths.RootlessPodman).Https;
         var domain = context.Parameters.TraefikDomain;
         var resource = context.Builder
             .AddContainer("homepage", ArrspireImages.Homepage)
@@ -190,6 +207,13 @@ internal static class InfrastructureResources
             {
                 var domainValue = await domain.Resource.GetValueAsync(
                     environment.CancellationToken);
+                var httpsPort = context.IsRunMode
+                    ? await ingress
+                        .Property(EndpointProperty.Port)
+                        .GetValueAsync(environment.CancellationToken)
+                        ?? throw new InvalidOperationException(
+                            "Traefik HTTPS endpoint port was not allocated")
+                    : configuredHttpsPort.ToString();
                 environment.EnvironmentVariables["HOMEPAGE_ALLOWED_HOSTS"] =
                     $"{domainValue},home.{domainValue},{domainValue}:{httpsPort},"
                     + $"home.{domainValue}:{httpsPort}";
@@ -218,7 +242,7 @@ internal static class InfrastructureResources
         return resource.HttpHandle("homepage");
     }
 
-    internal static string TraefikStaticConfiguration(IngressPorts ports)
+    internal static string TraefikStaticConfiguration()
         => $$"""
             api:
               dashboard: true
@@ -227,11 +251,6 @@ internal static class InfrastructureResources
             entryPoints:
               web:
                 address: ":80"
-                http:
-                  redirections:
-                    entryPoint:
-                      to: "{{Ingress.TraefikHttpsRedirectTarget(ports.Https)}}"
-                      scheme: https
               websecure:
                 address: ":443"
             providers:

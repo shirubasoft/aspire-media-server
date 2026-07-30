@@ -6,6 +6,7 @@ import { chmod, cp, mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, sep } from "node:path";
 import test from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 
 import { verifyBrowserAcceptance } from "./browser-acceptance.js";
@@ -80,6 +81,38 @@ async function removeTestContainers(instanceId: string): Promise<void> {
   }
 }
 
+async function waitForAppHostExit(appHostDirectory: string): Promise<void> {
+  const appHostPath = join(
+    appHostDirectory,
+    "Arrspire.AppHost",
+    "Arrspire.AppHost.csproj",
+  );
+  const deadline = Date.now() + 30_000;
+  do {
+    const { stdout } = await execute(
+      "aspire",
+      ["ps", "--format", "json", "--non-interactive"],
+      { cwd: appHostDirectory, timeout: 30_000 },
+    );
+    const appHosts = JSON.parse(stdout) as ReadonlyArray<{
+      readonly appHostPath?: string;
+      readonly status?: string;
+    }>;
+    if (
+      !appHosts.some(
+        (candidate) =>
+          candidate.appHostPath === appHostPath &&
+          candidate.status?.toLowerCase() === "running",
+      )
+    ) {
+      return;
+    }
+    await delay(250);
+  } while (Date.now() < deadline);
+
+  throw new Error(`AppHost did not stop within 30 seconds: ${appHostPath}`);
+}
+
 async function stopAppHost(appHost: RunningAppHost): Promise<void> {
   try {
     await execute(
@@ -92,6 +125,7 @@ async function stopAppHost(appHost: RunningAppHost): Promise<void> {
       ],
       { cwd: appHost.directory, timeout: 60_000 },
     );
+    await waitForAppHostExit(appHost.directory);
   } finally {
     await removeTestContainers(appHost.instanceId);
   }
@@ -119,6 +153,25 @@ async function acceptanceResult(appHostDirectory: string): Promise<{
     }>;
   };
   return document.resources?.[0] ?? {};
+}
+
+async function waitForHealthyResource(
+  appHostDirectory: string,
+  resource: string,
+): Promise<void> {
+  await execute(
+    "aspire",
+    [
+      "wait",
+      resource,
+      "--status",
+      "healthy",
+      "--timeout",
+      "900",
+      "--non-interactive",
+    ],
+    { cwd: appHostDirectory, timeout: 920_000 },
+  );
 }
 
 async function resourceEndpoint(
@@ -224,6 +277,12 @@ async function runAcceptance(
         `${diagnosticLogs.join("\n\n")}\n\n${appHost.output}`,
       );
     }
+    await Promise.all(
+      ["traefik", "homepage", "prometheus", "grafana", "duplicati"].map(
+        async (resource) =>
+          waitForHealthyResource(appHostDirectory, resource),
+      ),
+    );
     const ingressUrl = await resourceEndpoint(
       appHostDirectory,
       "traefik",
@@ -236,7 +295,7 @@ async function runAcceptance(
         domain: environment.Parameters__traefik_domain!,
         ingressUsername: environment.Parameters__ingress_admin_user!,
         ingressPassword: environment.Parameters__ingress_admin_password!,
-        jellyfinUsername: "admin",
+        jellyfinUsername: environment.Parameters__jellyfin_admin_user!,
         jellyfinPassword: environment.Parameters__jellyfin_admin_password!,
         qbittorrentPassword: environment.Parameters__qbittorrent_password!,
         duplicatiPassword: environment.Parameters__duplicati_web_password!,
@@ -383,7 +442,11 @@ void test(
       // resolver rule keeps this isolated on loopback instead of contacting
       // the LAN deployment that the hostname normally resolves to.
       Parameters__traefik_domain: testDomain,
+      Parameters__traefik_tls_mode: "local",
+      Parameters__traefik_acme_email: "",
+      Parameters__cloudflare_dns_api_token: "",
       Parameters__ingress_admin_user: "admin",
+      Parameters__jellyfin_admin_user: "admin",
       Parameters__jellyfin_admin_password: generatedSecret(),
       Parameters__qbittorrent_password: generatedSecret(),
       Parameters__duplicati_encryption_key: generatedSecret(32),

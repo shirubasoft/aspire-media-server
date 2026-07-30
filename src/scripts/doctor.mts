@@ -194,8 +194,7 @@ async function checkPort(name: string, port: number): Promise<void> {
 }
 
 async function checkDns(domain: string): Promise<void> {
-  const names =
-    domain === "localhost" ? [domain] : [domain, `jellyfin.${domain}`];
+  const names = [domain, `auth.${domain}`, `jellyfin.${domain}`];
   for (const hostname of names) {
     try {
       const address = await lookup(hostname);
@@ -249,6 +248,7 @@ async function checkTls(
     const remaining = new Date(certificate.validTo).getTime() - Date.now();
     const domainCovered =
       certificate.checkHost(domain) !== undefined &&
+      certificate.checkHost(`auth.${domain}`) !== undefined &&
       certificate.checkHost(`jellyfin.${domain}`) !== undefined;
     checks.push({
       name: "Local TLS certificate",
@@ -376,6 +376,8 @@ try {
     CF_DNS_API_TOKEN: parameter(parameters, "cloudflare-dns-api-token"),
     INGRESS_ADMIN_USER: parameter(parameters, "ingress-admin-user", "admin"),
     INGRESS_ADMIN_PASSWORD: "generated-by-aspire",
+    AUTHELIA_SESSION_SECRET: "s".repeat(64),
+    AUTHELIA_STORAGE_ENCRYPTION_KEY: "e".repeat(64),
     OPENSUBTITLESCOM_USER: parameter(parameters, "opensubtitlescom-user"),
     OPENSUBTITLESCOM_PASSWORD: parameter(
       parameters,

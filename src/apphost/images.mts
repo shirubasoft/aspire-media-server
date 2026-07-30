@@ -32,6 +32,8 @@ export const images = {
     "docker.io/duplicati/duplicati:latest@sha256:01f8cb81ad7d548b7ceec61d696bb5d27d8057fee0ddee37c2b8a0ff1f1729f7",
   tdarr:
     "ghcr.io/haveagitgat/tdarr:latest@sha256:eaeb1b39242685915b50f299a89f15e8ec4ef47f54d4b5b5ceee7e9d2a81c412",
+  authelia:
+    "docker.io/authelia/authelia:4.39@sha256:1b363e9279e742397966333f364e0876ae02bf5c876de73e83af6d48c57ff51b",
   traefik:
     "docker.io/library/traefik:v3.7@sha256:652929a140a32d7cafafb13c6cdfab5376cfeff800f51397b87b524501ed02a8",
   fail2ban:

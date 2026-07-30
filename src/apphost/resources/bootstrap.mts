@@ -48,6 +48,14 @@ export function addBootstrap(
         "INGRESS_ADMIN_PASSWORD",
         context.parameters.ingressAdminPassword,
       )
+      .withEnvironment(
+        "AUTHELIA_SESSION_SECRET",
+        context.parameters.autheliaSessionSecret,
+      )
+      .withEnvironment(
+        "AUTHELIA_STORAGE_ENCRYPTION_KEY",
+        context.parameters.autheliaStorageEncryptionKey,
+      )
       .withEnvironment("VPN_PROVIDER", context.parameters.vpnProvider)
       .withEnvironment(
         "VPN_WIREGUARD_KEY",

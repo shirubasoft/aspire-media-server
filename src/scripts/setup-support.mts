@@ -74,6 +74,8 @@ export function validateSetupValues(values: SetupValues): void {
     CF_DNS_API_TOKEN: parameters["cloudflare-dns-api-token"],
     INGRESS_ADMIN_USER: "admin",
     INGRESS_ADMIN_PASSWORD: "validated-during-setup",
+    AUTHELIA_SESSION_SECRET: "s".repeat(64),
+    AUTHELIA_STORAGE_ENCRYPTION_KEY: "e".repeat(64),
   });
   ntfyConfiguration({
     NTFY_ENDPOINT: parameters["ntfy-endpoint"],

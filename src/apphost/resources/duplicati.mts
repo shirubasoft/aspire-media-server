@@ -9,6 +9,7 @@ import {
 } from "./resource.mjs";
 
 const backupSources = [
+  "authelia",
   "sonarr",
   "radarr",
   "lidarr",

@@ -404,31 +404,40 @@ async function reconcileHomepageDns(): Promise<string | undefined> {
   return created.content;
 }
 
-async function homepageStatus(
-  domain: string,
+interface IngressResponse {
+  readonly status: number;
+  readonly location?: string;
+}
+
+async function ingressStatus(
+  hostname: string,
   port: number,
   address: string | undefined,
-  authorization: string | undefined,
   rejectUnauthorized: boolean,
-): Promise<number> {
-  return await new Promise<number>((resolvePromise, reject) => {
+): Promise<IngressResponse> {
+  return await new Promise<IngressResponse>((resolvePromise, reject) => {
     const homepageRequest = request(
       {
-        hostname: address ?? domain,
+        hostname: address ?? hostname,
         port,
         path: "/",
         method: "GET",
-        servername: domain,
+        servername: hostname,
         rejectUnauthorized,
         headers: {
-          Host: port === 443 ? domain : `${domain}:${String(port)}`,
-          ...(authorization === undefined ? {} : { Authorization: authorization }),
+          Accept: "text/html,application/xhtml+xml",
+          Host: port === 443 ? hostname : `${hostname}:${String(port)}`,
         },
       },
       (response) => {
         response.resume();
         response.once("end", () =>
-          resolvePromise(response.statusCode ?? 0)
+          resolvePromise({
+            status: response.statusCode ?? 0,
+            ...(response.headers.location === undefined
+              ? {}
+              : { location: response.headers.location }),
+          })
         );
       },
     );
@@ -446,11 +455,9 @@ async function verifyHomepage(address: string | undefined): Promise<void> {
     return;
   }
   const domain = values.TRAEFIK_DOMAIN;
-  const user = values.INGRESS_ADMIN_USER;
-  const password = values.INGRESS_ADMIN_PASSWORD;
-  if (!domain || !user || !password) {
+  if (!domain) {
     throw new Error(
-      "Homepage verification requires the deployed domain and ingress credentials.",
+      "Homepage verification requires the deployed ingress domain.",
     );
   }
   const port = publishedTraefikHttpsPort(
@@ -464,42 +471,49 @@ async function verifyHomepage(address: string | undefined): Promise<void> {
     ? configuredTimeout
     : 180_000;
   const deadline = Date.now() + timeout;
-  const authorization = `Basic ${Buffer.from(`${user}:${password}`).toString("base64")}`;
   let lastFailure = "the endpoint did not become ready";
+  const authHostname = `auth.${domain}`;
+  const expectedAuthUrl = `https://${authHostname}${
+    port === 443 ? "" : `:${String(port)}`
+  }/`;
 
   console.log(
-    `Waiting for a trusted certificate and authenticated Homepage at https://${domain}:${String(port)}/.`,
+    `Waiting for trusted TLS and the Arrspire sign-in portal at ${expectedAuthUrl}.`,
   );
   while (Date.now() < deadline) {
     try {
       // The first request starts Traefik's on-demand certificate flow.
-      await homepageStatus(domain, port, address, undefined, false);
+      await ingressStatus(domain, port, address, false);
     } catch {
       // The strict checks below provide the actionable final failure.
     }
     try {
-      const unauthenticated = await homepageStatus(
+      const unauthenticated = await ingressStatus(
         domain,
         port,
         address,
-        undefined,
         true,
       );
-      const authenticated = await homepageStatus(
-        domain,
+      const signIn = await ingressStatus(
+        authHostname,
         port,
         address,
-        authorization,
         true,
       );
-      if (unauthenticated === 401 && authenticated === 200) {
+      if (
+        unauthenticated.status === 302 &&
+        unauthenticated.location?.startsWith(expectedAuthUrl) === true &&
+        signIn.status === 200
+      ) {
         console.log(
-          `Homepage is ready with trusted TLS and ingress authentication: https://${domain}:${String(port)}/`,
+          `Homepage is ready with trusted TLS and centralized sign-in: https://${domain}:${String(port)}/`,
         );
         return;
       }
       lastFailure =
-        `expected HTTP 401/200 but received ${String(unauthenticated)}/${String(authenticated)}`;
+        `expected Homepage redirect to ${expectedAuthUrl} and sign-in HTTP 200 but received ` +
+        `${String(unauthenticated.status)} (${unauthenticated.location ?? "no location"})/` +
+        `${String(signIn.status)}`;
     } catch (error) {
       lastFailure = error instanceof Error ? error.message : String(error);
     }

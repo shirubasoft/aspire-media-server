@@ -1,7 +1,8 @@
 export type AuthenticationMode =
   | "service"
   | "ingress"
-  | "ingress+service";
+  | "ingress+service"
+  | "identity";
 
 export interface ServiceSurface {
   readonly name: string;
@@ -16,6 +17,11 @@ export interface CredentialSource {
 }
 
 export const serviceSurfaces = [
+  {
+    name: "auth",
+    label: "Arrspire sign-in",
+    authentication: "identity",
+  },
   {
     name: "home",
     label: "Arrspire home",
@@ -55,7 +61,7 @@ export const serviceSurfaces = [
 
 export const credentialSources = [
   {
-    surface: "Administrative ingress",
+    surface: "Arrspire sign-in",
     username: "Parameters:ingress-admin-user",
     password: "Parameters:ingress-admin-password",
   },
@@ -85,17 +91,23 @@ export function authenticationDescription(
   authentication: AuthenticationMode,
 ): string {
   if (authentication === "ingress+service") {
-    return "Ingress + service credentials";
+    return "Arrspire sign-in + service credentials";
+  }
+  if (authentication === "identity") {
+    return "Arrspire sign-in credentials";
   }
   return authentication === "ingress"
-    ? "Arrspire ingress credentials"
+    ? "Arrspire sign-in"
     : "Service credentials";
 }
 
 export function requiresIngressAuthentication(
   authentication: AuthenticationMode,
 ): boolean {
-  return authentication !== "service";
+  return (
+    authentication === "ingress" ||
+    authentication === "ingress+service"
+  );
 }
 
 export function serviceSurface(name: string): ServiceSurface {

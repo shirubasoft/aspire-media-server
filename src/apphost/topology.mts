@@ -3,6 +3,7 @@ import type { ArrspireParameters } from "./parameters.mjs";
 import type { ArrspirePaths } from "./paths.mjs";
 import {
   addAcceptance,
+  addAuthelia,
   addBazarr,
   addBootstrap,
   addDiun,
@@ -25,6 +26,7 @@ import {
   addTdarr,
   addTraefik,
   type AcceptanceResource,
+  type AutheliaResource,
   type BazarrResource,
   type BootstrapResource,
   type DiunResource,
@@ -64,6 +66,7 @@ export type ArrspireTopology = Readonly<{
   recyclarr: RecyclarrResource;
   duplicati: DuplicatiResource;
   tdarr: TdarrResource;
+  authelia: AutheliaResource;
   traefik: TraefikResource;
   fail2ban: Fail2banResource;
   diun: DiunResource;
@@ -102,7 +105,8 @@ export async function addArrspireTopology(
   const recyclarr = addRecyclarr(context);
   const duplicati = addDuplicati(context);
   const tdarr = addTdarr(context);
-  const traefik = addTraefik(context);
+  const authelia = addAuthelia(context);
+  const traefik = addTraefik(context, authelia);
   const fail2ban = await addFail2ban(context, traefik);
   const prometheus = addPrometheus(context);
   const grafana = addGrafana(context, prometheus);
@@ -124,6 +128,7 @@ export async function addArrspireTopology(
     tdarr: tdarr.webUi,
     duplicati: duplicati.http,
     homepage: homepage.http,
+    auth: authelia.http,
   };
 
   const bootstrap = addBootstrap(context, {
@@ -145,6 +150,7 @@ export async function addArrspireTopology(
     recyclarr.resource,
     duplicati.resource,
     tdarr.resource,
+    authelia.resource,
     traefik.resource,
     fail2ban.resource,
     diun.resource,
@@ -171,6 +177,7 @@ export async function addArrspireTopology(
     jellyfin.resource,
     seerr.resource,
     tdarr.resource,
+    authelia.resource,
     notifier.resource,
   ];
   const reconciliationEndpoints = {
@@ -214,6 +221,7 @@ export async function addArrspireTopology(
       recyclarr.resource,
       duplicati.resource,
       tdarr.resource,
+      authelia.resource,
       traefik.resource,
       diun.resource,
       prometheus.resource,
@@ -222,6 +230,7 @@ export async function addArrspireTopology(
       notifier.resource,
     ].map((resource) => withComposeRestart(resource)),
     withComposeInit(seerr.resource),
+    withComposeInit(authelia.resource),
     withComposeRestart(reconciler.resource, "on-failure:5"),
   ]);
 
@@ -238,6 +247,7 @@ export async function addArrspireTopology(
     recyclarr,
     duplicati,
     tdarr,
+    authelia,
     traefik,
     fail2ban,
     diun,

@@ -13,15 +13,15 @@ Aspire 13.4.6.
 - Sonarr, Radarr, Lidarr, Bazarr
 - Jellyfin, Seerr, Recyclarr
 - Duplicati, Tdarr, Diun
-- Traefik, Fail2ban
+- Traefik, Authelia, Fail2ban
 - Homepage, Prometheus, Grafana, and the Aspire dashboard
 
 The bootstrap creates stable API keys and initial configuration files before
 services start. The reconciler then connects qBittorrent to the Arr apps,
 Prowlarr to every Arr app, Bazarr to Sonarr and Radarr, Seerr to Jellyfin
 and the Arr apps, and Jellyfin to Bazarr and Seerr. It also installs the
-pinned Jellyfin plugin set with verified checksums and writes the Recyclarr,
-Traefik, Fail2ban, Prometheus, and Grafana configuration.
+pinned Jellyfin plugin set with verified checksums and writes the Authelia,
+Recyclarr, Traefik, Fail2ban, Prometheus, and Grafana configuration.
 
 ## First run
 
@@ -41,8 +41,9 @@ The guided setup masks secret input, validates all answers before writing,
 persists service parameters in Aspire's local secret store, and saves only
 non-secret path choices in ignored `.arrspire/config.json`. The VPN key is the
 only value without a safe default. Aspire generates and persists the
-administrative-ingress, Jellyfin, qBittorrent, Duplicati, and Grafana passwords.
-Existing values under `~/.aspire` are reused automatically.
+central sign-in, Jellyfin, qBittorrent, Duplicati, and Grafana passwords, plus
+Authelia's session and storage keys. Existing values under `~/.aspire` are
+reused automatically.
 
 `npm run doctor` is read-only. It checks the Node/Aspire/container runtime,
 Compose, VPN key shape, bind-mount permissions and capacity, socket, ingress
@@ -96,10 +97,15 @@ Traefik is the only application resource that publishes host ports by default.
 It uses ports 80/443 on rootful Docker or Podman and automatically uses
 unprivileged ports 8080/8443 with rootless Podman. Override the host ports with
 `ARRSPIRE_INGRESS_HTTP_PORT` and `ARRSPIRE_INGRESS_HTTPS_PORT` when needed.
-Traefik redirects HTTP to HTTPS and requires the generated Arrspire ingress
-credentials for administrative UIs. Jellyfin and Seerr retain their own
-service authentication. The insecure Traefik dashboard and direct service
-ports are disabled.
+Traefik redirects HTTP to HTTPS and delegates administrative UI authentication
+to Authelia. The first protected service redirects to `auth.<domain>`, where a
+normal password-manager-friendly form creates one session shared by every
+protected subdomain. The configured domain must be fully qualified; the
+checked-in `server-address.nip.io` form satisfies the browser cookie rules,
+while `localhost` does not. Jellyfin and Seerr retain their own service
+authentication; Duplicati also retains its own login. qBittorrent and Grafana
+keep their application login in addition to the shared Arrspire sign-in. The
+insecure Traefik dashboard and direct service ports are disabled.
 
 After deployment, the access table and readiness summary are printed
 automatically. Rerun them or repair reconciliation after supplying optional
@@ -114,7 +120,7 @@ The generated Homepage portal is available at the configured bare domain and
 at `home.<domain>`. It groups watch/request, library automation, download,
 processing, and operations surfaces; its Arr and qBittorrent widgets use
 root-only secret files generated during bootstrap. The portal has no direct
-host port and remains behind Arrspire ingress authentication.
+host port and remains behind the shared Arrspire sign-in.
 
 Push notifications are opt-in through any ntfy-compatible server. Set a
 private, hard-to-guess topic and optionally a bearer token:
@@ -199,9 +205,9 @@ plane, resolves parameters into an environment-specific `.env` file, restricts
 generated files to the current user, selects Docker or Podman, and starts the
 stack. On Podman, it automatically recovers the known Gluetun namespace
 replacement conflict in project scope. Cloudflare ACME deployments reconcile
-the bare Homepage DNS record and wait for trusted TLS plus the expected
-unauthenticated/authenticated HTTP responses before succeeding. Bind-mount
-paths and deployment parameters are materialized automatically. In
+the bare Homepage DNS record and wait for trusted TLS, the Homepage-to-Authelia
+redirect, and a healthy sign-in portal before succeeding. Bind-mount paths and
+deployment parameters are materialized automatically. In
 non-interactive environments, explicit `Parameters__*` variables continue to
 take precedence over saved secrets.
 
@@ -243,10 +249,11 @@ container with four commands:
 - `verify` is the real-stack acceptance suite used by E2E tests.
 
 CI starts an isolated stack twice and complements the API acceptance checks
-with headless Playwright coverage. The browser suite crosses Traefik, opens
-every web UI, exercises Jellyfin, Seerr, qBittorrent, Duplicati, and
-Grafana login flows, navigates the Jellyfin libraries, and verifies the
-Seerr and Grafana service-integration screens.
+with headless Playwright coverage. The browser suite signs in once through
+Authelia, crosses every protected Traefik route without signing in again,
+exercises Jellyfin, Seerr, qBittorrent, Duplicati, and Grafana login flows,
+navigates the Jellyfin libraries, and verifies the Seerr and Grafana
+service-integration screens.
 
 Public tracker registration is best-effort because third-party availability and
 bot protection are outside the stack's control. Core service configuration is

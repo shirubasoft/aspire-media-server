@@ -396,6 +396,8 @@ void test(
       Parameters__grafana_admin_password:
         "ArrspireE2EGrafana123456789",
       Parameters__ingress_admin_password: generatedSecret(),
+      Parameters__authelia_session_secret: generatedSecret(64),
+      Parameters__authelia_storage_encryption_key: generatedSecret(64),
     };
 
     try {

@@ -138,6 +138,34 @@ async function verifySurface(
   );
 }
 
+async function signIntoArrspire(
+  page: Page,
+  options: BrowserAcceptanceOptions,
+): Promise<void> {
+  const homepage = serviceUrl(
+    options.ingressUrl,
+    options.domain,
+    "home",
+  );
+  await gotoAvailable(page, homepage);
+  assert.equal(
+    new URL(page.url()).hostname,
+    `auth.${options.domain}`,
+    "Administrative ingress did not redirect to the Arrspire sign-in portal",
+  );
+  await page.locator("#username-textfield").fill(options.ingressUsername);
+  await page.locator("#password-textfield").fill(options.ingressPassword);
+  await page.locator("#sign-in-button").click();
+  await page.waitForURL(
+    (url) => url.hostname !== `auth.${options.domain}`,
+    { timeout: 30_000 },
+  );
+  await page.locator('a[href*="jellyfin."]').first().waitFor({
+    state: "visible",
+    timeout: 30_000,
+  });
+}
+
 async function verifyAspireDashboard(
   page: Page,
   options: BrowserAcceptanceOptions,
@@ -348,12 +376,9 @@ export async function verifyBrowserAcceptance(
   try {
     const administrativeContext = await browser.newContext({
       ignoreHTTPSErrors: true,
-      httpCredentials: {
-        username: options.ingressUsername,
-        password: options.ingressPassword,
-      },
     });
     const administrativePage = await administrativeContext.newPage();
+    await signIntoArrspire(administrativePage, options);
     for (const surface of administrativeSurfaces) {
       await verifySurface(administrativePage, options, surface);
     }

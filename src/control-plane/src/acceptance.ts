@@ -404,6 +404,9 @@ async function verifySeerr(apiKey: string): Promise<void> {
     json<
       Array<{
         readonly isDefault?: boolean;
+        readonly hostname?: string;
+        readonly port?: number;
+        readonly useSsl?: boolean;
         readonly animeSeriesType?: string;
         readonly activeAnimeProfileName?: string;
         readonly activeAnimeDirectory?: string;
@@ -415,6 +418,9 @@ async function verifySeerr(apiKey: string): Promise<void> {
     ),
     json<Array<{
       readonly isDefault?: boolean;
+      readonly hostname?: string;
+      readonly port?: number;
+      readonly useSsl?: boolean;
       readonly externalUrl?: string;
     }>>(
       `${baseUrl}/api/v1/settings/radarr`,
@@ -429,42 +435,40 @@ async function verifySeerr(apiKey: string): Promise<void> {
       jellyfinSettings.useSsl === (jellyfinUrl.protocol === "https:"),
     "Seerr Jellyfin endpoint is not reconciled",
   );
-  ensure(
-    sonarr.some((service) => service.isDefault),
-    "Seerr has no default Sonarr",
-  );
+  const defaultSonarr = sonarr.find((service) => service.isDefault);
+  ensure(defaultSonarr, "Seerr has no default Sonarr");
+  const sonarrUrl = new URL(endpoint("sonarr"));
   const domain = required("TRAEFIK_DOMAIN");
   const ingressHttpsPort = integer("INGRESS_HTTPS_PORT", 443);
   ensure(
-    sonarr.some(
-      (service) =>
-        service.isDefault &&
-        service.externalUrl ===
-          publicServiceUrl("sonarr", domain, ingressHttpsPort),
-    ),
+    defaultSonarr.hostname === sonarrUrl.hostname &&
+      defaultSonarr.port === Number(sonarrUrl.port || 8989) &&
+      defaultSonarr.useSsl === (sonarrUrl.protocol === "https:"),
+    "Seerr Sonarr internal endpoint is not reconciled",
+  );
+  ensure(
+    defaultSonarr.externalUrl ===
+      publicServiceUrl("sonarr", domain, ingressHttpsPort),
     "Seerr Sonarr external URL is not reconciled",
   );
   ensure(
-    sonarr.some(
-      (service) =>
-        service.isDefault &&
-        service.animeSeriesType === "anime" &&
-        service.activeAnimeProfileName === "[Anime] Remux-1080p" &&
-        service.activeAnimeDirectory === "/tv",
-    ),
+    defaultSonarr.animeSeriesType === "anime" &&
+      defaultSonarr.activeAnimeProfileName === "[Anime] Remux-1080p" &&
+      defaultSonarr.activeAnimeDirectory === "/tv",
     "Seerr does not use the anime Blu-ray profile for anime requests",
   );
+  const defaultRadarr = radarr.find((service) => service.isDefault);
+  ensure(defaultRadarr, "Seerr has no default Radarr");
+  const radarrUrl = new URL(endpoint("radarr"));
   ensure(
-    radarr.some((service) => service.isDefault),
-    "Seerr has no default Radarr",
+    defaultRadarr.hostname === radarrUrl.hostname &&
+      defaultRadarr.port === Number(radarrUrl.port || 7878) &&
+      defaultRadarr.useSsl === (radarrUrl.protocol === "https:"),
+    "Seerr Radarr internal endpoint is not reconciled",
   );
   ensure(
-    radarr.some(
-      (service) =>
-        service.isDefault &&
-        service.externalUrl ===
-          publicServiceUrl("radarr", domain, ingressHttpsPort),
-    ),
+    defaultRadarr.externalUrl ===
+      publicServiceUrl("radarr", domain, ingressHttpsPort),
     "Seerr Radarr external URL is not reconciled",
   );
   const authentication = await request(

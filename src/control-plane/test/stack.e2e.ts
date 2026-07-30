@@ -41,7 +41,6 @@ async function startAppHost(
     [
       "start",
       "--isolated",
-      "--no-build",
       "--format",
       "json",
       "--non-interactive",
@@ -88,7 +87,7 @@ async function stopAppHost(appHost: RunningAppHost): Promise<void> {
       [
         "stop",
         "--apphost",
-        join(appHost.directory, "apphost.mts"),
+        join(appHost.directory, "Arrspire.AppHost", "Arrspire.AppHost.csproj"),
         "--non-interactive",
       ],
       { cwd: appHost.directory, timeout: 60_000 },
@@ -265,17 +264,13 @@ async function createIsolatedAppHost(root: string): Promise<string> {
     recursive: true,
     filter: (source) => {
       const path = relative(projectDirectory, source);
-      const topLevel = path.split(sep)[0];
-      return !["aspire-output", "data", "dist", "node_modules"].includes(
-        topLevel ?? "",
+      return !path.split(sep).some((segment) =>
+        ["aspire-output", "data", "bin", "obj", "node_modules"].includes(
+          segment,
+        ),
       );
     },
   });
-  await cp(
-    join(projectDirectory, "node_modules"),
-    join(appHostDirectory, "node_modules"),
-    { recursive: true },
-  );
   return appHostDirectory;
 }
 

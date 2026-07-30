@@ -9,7 +9,7 @@
 # Arrspire runtime and deployment state
 data/
 data.pre-typescript-e2e-*/
-src/aspire-output/
+**/aspire-output/
 
 # User-specific files
 *.rsuser

@@ -1,0 +1,109 @@
+using System.Text.RegularExpressions;
+
+namespace Arrspire.Operator;
+
+internal static partial class PublicationValidator
+{
+    public static void Validate(string compose)
+    {
+        var published = PublishedPorts(compose);
+        if (published.Count != 1 || !published.ContainsKey("traefik"))
+        {
+            throw new InvalidOperationException(
+                "Only Traefik may publish host ports by default.");
+        }
+        foreach (var required in new[]
+        {
+            "TRAEFIK_API_INSECURE: \"false\"",
+            "ASPIRE_DASHBOARD_FORWARDEDHEADERS_ENABLED: \"true\"",
+            "DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: \"true\"",
+            "DUPLICATI__WEBSERVICE_ALLOWED_HOSTNAMES: \"*\"",
+            "AUTHELIA_SESSION_SECRET_FILE: \"/secrets/session-secret\"",
+            "AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE: \"/secrets/storage-encryption-key\"",
+            "DIUN_NOTIF_WEBHOOK_ENDPOINT: \"http://notifier:8080/diun\"",
+            "NOTIFIER_URL: \"http://notifier:8080\"",
+            "CF_DNS_API_TOKEN: \"${CLOUDFLARE_DNS_API_TOKEN}\"",
+            "TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_STORAGE: \"/acme/acme.json\"",
+            "TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_DNSCHALLENGE: \"true\"",
+            "TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_DNSCHALLENGE_RESOLVERS: \"1.1.1.1:53,8.8.8.8:53\"",
+            "network_mode: \"service:gluetun\"",
+        })
+        {
+            if (!compose.Contains(required, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Published Compose is missing required setting: {required}");
+            }
+        }
+        if (compose.Contains("TRAEFIK_API_INSECURE: \"true\"", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "Published Compose enables the insecure Traefik API.");
+        }
+        foreach (Match match in ImageRegex().Matches(compose))
+        {
+            var image = match.Groups[1].Value;
+            if (!image.StartsWith("${", StringComparison.Ordinal)
+                && !PinnedImageRegex().IsMatch(image))
+            {
+                throw new InvalidOperationException(
+                    $"Published image is not immutable: {image}");
+            }
+        }
+    }
+
+    internal static IReadOnlyDictionary<string, IReadOnlyList<string>> PublishedPorts(
+        string compose)
+    {
+        var result = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        string? service = null;
+        List<string>? ports = null;
+        foreach (var line in compose.Split('\n'))
+        {
+            var serviceMatch = ServiceRegex().Match(line);
+            if (serviceMatch.Success)
+            {
+                service = serviceMatch.Groups[1].Value;
+                ports = null;
+                continue;
+            }
+            if (line == "    ports:")
+            {
+                if (service is null)
+                {
+                    throw new InvalidOperationException(
+                        "Compose ports appeared outside a service.");
+                }
+                ports = [];
+                result[service] = ports;
+                continue;
+            }
+            if (ports is not null)
+            {
+                var port = PortRegex().Match(line);
+                if (port.Success)
+                {
+                    ports.Add(port.Groups[1].Value);
+                }
+                else if (line.StartsWith("    ", StringComparison.Ordinal)
+                    && !line.StartsWith("      ", StringComparison.Ordinal))
+                {
+                    ports = null;
+                }
+            }
+        }
+        return result;
+    }
+
+    [GeneratedRegex("^  ([a-z0-9][a-z0-9-]*):$")]
+    private static partial Regex ServiceRegex();
+
+    [GeneratedRegex("^      - \"([^\"]+)\"$")]
+    private static partial Regex PortRegex();
+
+    [GeneratedRegex("^\\s+image: \"([^\"]+)\"$", RegexOptions.Multiline)]
+    private static partial Regex ImageRegex();
+
+    [GeneratedRegex("@sha256:[a-f0-9]{64}$")]
+    private static partial Regex PinnedImageRegex();
+}

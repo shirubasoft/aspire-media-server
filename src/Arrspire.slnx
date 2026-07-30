@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/AppHost/">
+    <Project Path="Arrspire.AppHost/Arrspire.AppHost.csproj" />
+    <Project Path="Arrspire.ContainerRunner/Arrspire.ContainerRunner.csproj" />
+    <Project Path="Arrspire.Operator/Arrspire.Operator.csproj" />
+  </Folder>
+  <Folder Name="/ControlPlane/">
+    <Project Path="Arrspire.ControlPlane/Arrspire.ControlPlane.csproj" />
+  </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="Arrspire.AppHost.Tests/Arrspire.AppHost.Tests.csproj" />
+    <Project Path="Arrspire.ControlPlane.Tests/Arrspire.ControlPlane.Tests.csproj" />
+    <Project Path="Arrspire.Operator.Tests/Arrspire.Operator.Tests.csproj" />
+  </Folder>
+</Solution>

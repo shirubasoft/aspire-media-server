@@ -26,6 +26,7 @@ internal sealed record ArrspirePaths(
         fileExists ??= File.Exists;
 
         var sourceRoot = Path.GetFullPath(Path.Combine(appHostDirectory, ".."));
+        var repositoryRoot = Path.GetFullPath(Path.Combine(sourceRoot, ".."));
         var operatorConfig = ReadOperatorConfig(sourceRoot)
             ?? ReadOperatorConfig(appHostDirectory);
         var uid = UnixIdentity.UserId;
@@ -38,7 +39,7 @@ internal sealed record ArrspirePaths(
         return new ArrspirePaths(
             Get(environment, "ARRSPIRE_DATA_PATH")
                 ?? operatorConfig?.Paths.Data
-                ?? Path.Combine(sourceRoot, "data"),
+                ?? Path.Combine(repositoryRoot, "data"),
             Get(environment, "ARRSPIRE_MEDIA_PATH")
                 ?? operatorConfig?.Paths.Media
                 ?? Path.Combine(homeDirectory, "media"),

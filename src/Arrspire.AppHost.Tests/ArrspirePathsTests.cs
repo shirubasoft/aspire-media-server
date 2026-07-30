@@ -33,15 +33,37 @@ public sealed class ArrspirePathsTests
     }
 
     [Fact]
+    public void PreservesTheTypeScriptAppHostDefaultDataPath()
+    {
+        var repositoryRoot = Path.Combine(
+            Path.GetTempPath(),
+            $"arrspire-paths-{Guid.NewGuid():N}");
+        var appHostDirectory = Path.Combine(
+            repositoryRoot,
+            "src",
+            "Arrspire.AppHost");
+
+        var resolved = ArrspirePaths.Resolve(
+            appHostDirectory,
+            new Dictionary<string, string?>(),
+            "/home/test",
+            _ => false);
+
+        Assert.Equal(
+            Path.Combine(repositoryRoot, "data"),
+            resolved.Data);
+    }
+
+    [Fact]
     public void LoadsIgnoredOperatorConfiguration()
     {
         var root = Path.Combine(Path.GetTempPath(), $"arrspire-paths-{Guid.NewGuid():N}");
         var appHostDirectory = Path.Combine(root, "Arrspire.AppHost");
-        Directory.CreateDirectory(Path.Combine(appHostDirectory, ".arrspire"));
+        Directory.CreateDirectory(Path.Combine(root, ".arrspire"));
         try
         {
             File.WriteAllText(
-                Path.Combine(appHostDirectory, ".arrspire", "config.json"),
+                Path.Combine(root, ".arrspire", "config.json"),
                 JsonSerializer.Serialize(new
                 {
                     schemaVersion = 1,

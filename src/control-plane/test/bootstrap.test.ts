@@ -222,6 +222,7 @@ void test("generates a secure, useful Homepage configuration", () => {
   const services = Object.fromEntries(
     [
       "aspire",
+      "auth",
       "bazarr",
       "duplicati",
       "grafana",
@@ -252,6 +253,10 @@ void test("generates a secure, useful Homepage configuration", () => {
   assert.match(
     configuration,
     /href: "https:\/\/jellyfin\.home\.example\.com:8443"/u,
+  );
+  assert.match(
+    configuration,
+    /- Authelia:\n[\s\S]*?href: "https:\/\/auth\.home\.example\.com:8443"[\s\S]*?siteMonitor: "http:\/\/auth:1234\/api\/health"/u,
   );
   assert.match(configuration, /type: sonarr/u);
   assert.match(

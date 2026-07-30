@@ -464,6 +464,7 @@ function externalRootUrl(domain: string, httpsPort: number): string {
 
 interface HomepageService {
   readonly name: string;
+  readonly routeName?: string;
   readonly icon: string;
   readonly description: string;
   readonly internalUrl: string;
@@ -485,7 +486,7 @@ function homepageCard(
   const lines = [
     `    - ${service.name}:`,
     `        icon: ${service.icon}`,
-    `        href: ${yamlString(externalServiceUrl(service.name.toLowerCase(), domain, httpsPort))}`,
+    `        href: ${yamlString(externalServiceUrl(service.routeName ?? service.name.toLowerCase(), domain, httpsPort))}`,
     `        description: ${yamlString(service.description)}`,
     `        siteMonitor: ${yamlString(`${service.internalUrl}${service.healthPath}`)}`,
   ];
@@ -539,7 +540,7 @@ layout:
     columns: 4
   Operations:
     style: row
-    columns: 4
+    columns: 5
 `;
 }
 
@@ -585,6 +586,18 @@ ${card("Tdarr", "tdarr.png", "Media health and transcoding", "/api/v2/status", {
 ${card("Duplicati", "duplicati.png", "Configuration backups", "/ngclient/")}
 
 - Operations:
+${homepageCard(
+  {
+    name: "Authelia",
+    routeName: "auth",
+    icon: "authelia.png",
+    description: "Identity and access management",
+    internalUrl: services.auth?.url ?? "",
+    healthPath: "/api/health",
+  },
+  domain,
+  httpsPort,
+)}
 ${card("Grafana", "grafana.png", "Metrics dashboards", "/api/health")}
 ${card("Prometheus", "prometheus.png", "Metrics collection", "/-/healthy")}
 ${homepageCard(

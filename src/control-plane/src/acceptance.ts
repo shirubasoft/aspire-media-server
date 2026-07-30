@@ -97,6 +97,17 @@ async function verifyBootstrapFiles(): Promise<void> {
     "Arrspire home or the Aspire dashboard is not protected by ingress",
   );
 
+  const homepage = await readFile(
+    "/data/homepage/services.yaml",
+    "utf8",
+  );
+  ensure(
+    homepage.includes("- Authelia:") &&
+      homepage.includes(`https://auth.${required("TRAEFIK_DOMAIN")}`) &&
+      homepage.includes(`${endpoint("auth")}/api/health`),
+    "Homepage does not include the Authelia service card",
+  );
+
   const pluginDirectories = await readdir("/data/jellyfin/plugins");
   for (const plugin of [
     "Bazarr_",

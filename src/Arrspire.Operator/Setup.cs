@@ -68,6 +68,16 @@ internal static class Setup
             Console.WriteLine();
             return value.Count == 0 ? fallback : new string([.. value]);
         }
+        bool Confirm(string label)
+        {
+            if (nonInteractive)
+            {
+                return true;
+            }
+            Console.Write($"{label} [y/N]: ");
+            return Console.ReadLine()?.Trim() is { } response
+                && response.Equals("y", StringComparison.OrdinalIgnoreCase);
+        }
 
         Console.WriteLine(nonInteractive
             ? "Arrspire non-interactive setup"
@@ -76,7 +86,7 @@ internal static class Setup
             Ask("Gluetun VPN provider", Current("vpn-provider", "protonvpn")),
             Ask("VPN exit countries", Current("vpn-countries", "Netherlands")),
             AskSecret("WireGuard private key", Current("vpn-wireguard-key", "")),
-            Ask("IANA timezone", Current("timezone", TimeZoneInfo.Local.Id)),
+            Ask("IANA timezone", Current("timezone", DefaultTimezone())),
             Ask("Jellyfin language", Current("jellyfin-language", "pt-BR")),
             Ask("Subtitle languages", Current("subtitle-languages", "pt-BR")),
             Ask("Private ingress domain", Current("traefik-domain", Ingress.DefaultTraefikDomain)),
@@ -87,7 +97,7 @@ internal static class Setup
             Path.GetFullPath(Ask("Media path", paths.Media)),
             Path.GetFullPath(Ask("Downloads path", paths.Downloads)),
             Ask("ntfy endpoint", Current("ntfy-endpoint", "https://ntfy.sh")),
-            Ask("ntfy topic", Current("ntfy-topic", "")),
+            AskSecret("Private ntfy topic", Current("ntfy-topic", "")),
             AskSecret("ntfy access token", Current("ntfy-token", "")));
 
         Validate(values);
@@ -97,6 +107,23 @@ internal static class Setup
             ["media"] = values.MediaPath,
             ["downloads"] = values.DownloadsPath,
         });
+        Console.WriteLine();
+        Console.WriteLine($"VPN: {values.VpnProvider} / {values.VpnCountries}");
+        Console.WriteLine(
+            $"Locale: {values.Timezone} / {values.JellyfinLanguage}");
+        Console.WriteLine(
+            $"Ingress: {values.TraefikDomain} ({values.TraefikTlsMode})");
+        Console.WriteLine($"Data: {values.DataPath}");
+        Console.WriteLine($"Media: {values.MediaPath}");
+        Console.WriteLine($"Downloads: {values.DownloadsPath}");
+        Console.WriteLine(
+            $"Notifications: {(values.NtfyTopic.Length > 0 ? "enabled" : "disabled")}");
+        if (!Confirm("Save this configuration?"))
+        {
+            Console.WriteLine("Setup cancelled without making changes.");
+            return 1;
+        }
+
         foreach (var directory in new[]
         {
             values.DataPath, values.MediaPath, values.DownloadsPath,
@@ -134,29 +161,39 @@ internal static class Setup
         }
 
         var configDirectory = Path.Combine(root, ".arrspire");
-        Directory.CreateDirectory(configDirectory);
+        UnixPermissions.ProtectDirectory(configDirectory);
         var configPath = Path.Combine(configDirectory, "config.json");
-        var temporary = configPath + $".{Environment.ProcessId}.tmp";
-        await File.WriteAllTextAsync(
-            temporary,
-            JsonSerializer.Serialize(
-                new
+        var temporary = configPath + $".{Environment.ProcessId}.{Guid.NewGuid():N}.tmp";
+        var content = JsonSerializer.Serialize(
+            new
+            {
+                schemaVersion = 1,
+                paths = new
                 {
-                    schemaVersion = 1,
-                    paths = new
-                    {
-                        data = values.DataPath,
-                        media = values.MediaPath,
-                        downloads = values.DownloadsPath,
-                    },
+                    data = values.DataPath,
+                    media = values.MediaPath,
+                    downloads = values.DownloadsPath,
                 },
-                new JsonSerializerOptions { WriteIndented = true }) + "\n");
-        File.Move(temporary, configPath, true);
-        UnixFileMode privateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+            },
+            new JsonSerializerOptions { WriteIndented = true }) + "\n";
+        var fileOptions = new FileStreamOptions
+        {
+            Access = FileAccess.Write,
+            Mode = FileMode.CreateNew,
+            Share = FileShare.None,
+        };
         if (!OperatingSystem.IsWindows())
         {
-            File.SetUnixFileMode(configPath, privateMode);
+            fileOptions.UnixCreateMode =
+                UnixFileMode.UserRead | UnixFileMode.UserWrite;
         }
+        await using (var stream = new FileStream(temporary, fileOptions))
+        await using (var writer = new StreamWriter(stream))
+        {
+            await writer.WriteAsync(content);
+        }
+        File.Move(temporary, configPath, true);
+        UnixPermissions.ProtectFile(configPath);
 
         Console.WriteLine($"Saved local paths to {configPath}");
         Console.WriteLine("Next: run `dotnet run --project Arrspire.Operator -- doctor`.");
@@ -188,7 +225,22 @@ internal static class Setup
         {
             throw new InvalidOperationException("ntfy token requires an ntfy topic");
         }
-        _ = new Uri(values.NtfyEndpoint, UriKind.Absolute);
+        _ = NotificationRelay.Configuration(new Dictionary<string, string?>
+        {
+            ["NTFY_ENDPOINT"] = values.NtfyEndpoint,
+            ["NTFY_TOPIC"] = values.NtfyTopic,
+            ["NTFY_TOKEN"] = values.NtfyToken,
+        });
+    }
+
+    internal static string DefaultTimezone(string? localId = null)
+    {
+        var id = localId ?? TimeZoneInfo.Local.Id;
+        if (TimeZoneInfo.TryConvertWindowsIdToIanaId(id, out var iana))
+        {
+            return iana;
+        }
+        return id.Contains('/', StringComparison.Ordinal) ? id : "UTC";
     }
 
     private static async Task<Dictionary<string, string>> ExistingParametersAsync(

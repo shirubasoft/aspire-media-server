@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 return await VpnContainerRunner.RunAsync(args);
 
@@ -16,6 +17,7 @@ internal static class VpnContainerRunner
             && int.TryParse(wrapperPidValue, out var wrapperPid)
             && int.TryParse(watchAppHostPidValue, out var watchAppHostPid))
         {
+            Detach();
             await WatchDetachedAsync(
                 watchRuntime,
                 watchContainer,
@@ -85,19 +87,42 @@ internal static class VpnContainerRunner
         {
             var appHostAlive = ProcessExists(appHostPid);
             var wrapperAlive = ProcessExists(wrapperPid);
-            if (!wrapperAlive && !wrapperCleaned)
+            var step = CleanupStep(
+                appHostAlive,
+                wrapperAlive,
+                wrapperCleaned,
+                containerName,
+                gluetunContainerName);
+            wrapperCleaned = step.WrapperCleaned;
+            foreach (var container in step.Containers)
             {
-                wrapperCleaned = true;
-                Remove(runtime, containerName);
+                Remove(runtime, container);
             }
 
             if (!appHostAlive)
             {
-                Remove(runtime, containerName);
-                Remove(runtime, gluetunContainerName);
                 return;
             }
         }
+    }
+
+    internal static (bool WrapperCleaned, IReadOnlyList<string> Containers)
+        CleanupStep(
+            bool appHostAlive,
+            bool wrapperAlive,
+            bool wrapperCleaned,
+            string containerName,
+            string gluetunContainerName)
+    {
+        if (!appHostAlive)
+        {
+            return (true, [containerName, gluetunContainerName]);
+        }
+        if (!wrapperAlive && !wrapperCleaned)
+        {
+            return (true, [containerName]);
+        }
+        return (wrapperCleaned, []);
     }
 
     private static void StartWatchdog(
@@ -126,31 +151,20 @@ internal static class VpnContainerRunner
             appHostPid.ToString(),
         ]);
 
-        ProcessStartInfo startInfo;
-        if (OperatingSystem.IsLinux())
+        var startInfo = new ProcessStartInfo(processPath)
         {
-            startInfo = new ProcessStartInfo("setsid")
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            };
-            startInfo.ArgumentList.Add(processPath);
-        }
-        else
-        {
-            startInfo = new ProcessStartInfo(processPath)
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            };
-        }
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
 
         foreach (var argument in arguments)
         {
             startInfo.ArgumentList.Add(argument);
         }
 
-        _ = Process.Start(startInfo)
+        using var watchdog = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Unable to launch the VPN lifecycle watchdog.");
     }
 
@@ -182,6 +196,14 @@ internal static class VpnContainerRunner
         }
     }
 
+    private static void Detach()
+    {
+        if (OperatingSystem.IsLinux())
+        {
+            _ = setsid();
+        }
+    }
+
     private static void Remove(string runtime, string name)
     {
         try
@@ -194,4 +216,7 @@ internal static class VpnContainerRunner
             // Cleanup is best effort; the exact names allow a later command to retry safely.
         }
     }
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern int setsid();
 }

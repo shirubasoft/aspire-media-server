@@ -26,7 +26,7 @@ public sealed partial class ImageTests
         }
     }
 
-    [GeneratedRegex("^[a-f0-9]{64}$")]
+    [GeneratedRegex("^sha256:[a-f0-9]{64}$")]
     private static partial Regex DigestRegex();
 
     [GeneratedRegex(

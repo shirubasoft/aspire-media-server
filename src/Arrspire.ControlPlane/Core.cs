@@ -58,7 +58,9 @@ internal static class Retry
                 return await operation(cancellationToken);
             }
             catch (Exception exception) when (
-                attempt < attempts && exception is not OperationCanceledException)
+                attempt < attempts
+                && (exception is not OperationCanceledException
+                    || !cancellationToken.IsCancellationRequested))
             {
                 var delay = nextDelay < maximumDelay ? nextDelay : maximumDelay;
                 Log.Warning("Operation failed; retrying", new

@@ -3,9 +3,26 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "^20.19.0 || ^22.13.0 || >=24"
+  },
   "scripts": {
     "test": "npm run test:e2e",
-    "test:e2e": "tsx --test --test-concurrency=1 control-plane/test/stack.e2e.ts"
+    "test:unit": "dotnet test Arrspire.slnx --configuration Release",
+    "test:e2e": "tsx --test --test-concurrency=1 control-plane/test/stack.e2e.ts",
+    "build": "dotnet build Arrspire.slnx --configuration Release",
+    "dev": "aspire run",
+    "publish": "dotnet run --project Arrspire.Operator -- publish",
+    "deploy": "dotnet run --project Arrspire.Operator -- deploy",
+    "deploy:down": "dotnet run --project Arrspire.Operator -- down",
+    "repair": "dotnet run --project Arrspire.Operator -- repair",
+    "status": "dotnet run --project Arrspire.Operator -- status",
+    "setup": "dotnet run --project Arrspire.Operator -- setup",
+    "doctor": "dotnet run --project Arrspire.Operator -- doctor",
+    "tls:local": "dotnet run --project Arrspire.Operator -- tls-local",
+    "network:allow-lan": "dotnet run --project Arrspire.Operator -- allow-lan",
+    "locale": "dotnet run --project Arrspire.Operator -- locale",
+    "cleanup:vpn": "dotnet run --project Arrspire.Operator -- cleanup-vpn"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

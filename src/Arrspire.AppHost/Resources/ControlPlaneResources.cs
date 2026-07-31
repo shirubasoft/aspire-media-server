@@ -26,16 +26,32 @@ internal static class ControlPlaneResources
 {
     public static HttpResourceHandle AddNotifier(
         ArrspireContext context,
-        HttpResourceHandle homepage)
+        HttpResourceHandle homepage,
+        EndpointReference publicIngress)
     {
+        var configuredHttpsPort = Ingress.ResolvePorts(context.Paths.RootlessPodman).Https;
+        var domain = context.Parameters.TraefikDomain;
         var resource = AddControlPlane(context, "notifier", "serve-notifications", false)
             .WithEnvironment("PORT", "8080")
             .WithEnvironment("NTFY_ENDPOINT", context.Parameters.NtfyEndpoint)
             .WithEnvironment("NTFY_TOPIC", context.Parameters.NtfyTopic)
             .WithEnvironment("NTFY_TOKEN", context.Parameters.NtfyToken)
-            .WithEnvironment(
-                "ARRSPIRE_HOME_URL",
-                ReferenceExpression.Create($"{homepage.Http}"))
+            .WithEnvironment(async environment =>
+            {
+                var domainValue = await domain.Resource.GetValueAsync(
+                    environment.CancellationToken);
+                var httpsPort = context.IsRunMode
+                    ? await publicIngress
+                        .Property(EndpointProperty.Port)
+                        .GetValueAsync(environment.CancellationToken)
+                        ?? throw new InvalidOperationException(
+                            "Traefik public HTTPS endpoint port was not allocated")
+                    : configuredHttpsPort.ToString();
+                environment.EnvironmentVariables["ARRSPIRE_HOME_URL"] =
+                    $"https://{domainValue}"
+                    + (httpsPort == "443" ? string.Empty : $":{httpsPort}");
+            })
+            .WaitFor(homepage.Resource)
             .WithEndpoint(targetPort: 8080, scheme: "http", name: "http")
             .WithHttpHealthCheck("/healthz")
             .WithComposeRestart();

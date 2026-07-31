@@ -18,5 +18,6 @@
 
   <ItemGroup>
     <ProjectReference Include="../Arrspire.AppHost/Arrspire.AppHost.csproj" />
+    <ProjectReference Include="../Arrspire.ContainerRunner/Arrspire.ContainerRunner.csproj" />
   </ItemGroup>
 </Project>

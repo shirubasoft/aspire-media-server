@@ -50,7 +50,10 @@ internal static class ArrspireTopologyBuilder
         var prometheus = InfrastructureResources.AddPrometheus(context);
         var grafana = InfrastructureResources.AddGrafana(context, prometheus);
         var homepage = InfrastructureResources.AddHomepage(context, traefik.PublicHttps);
-        var notifier = ControlPlaneResources.AddNotifier(context, homepage);
+        var notifier = ControlPlaneResources.AddNotifier(
+            context,
+            homepage,
+            traefik.PublicHttps);
         var diun = ControlPlaneResources.AddDiun(context, notifier);
 
         var endpoints = new ControlPlaneEndpoints(

@@ -4,7 +4,10 @@ namespace Arrspire.Operator;
 
 internal static partial class PublicationValidator
 {
-    public static void Validate(string compose)
+    public static void Validate(
+        string compose,
+        int expectedHttpPort,
+        int expectedHttpsPort)
     {
         var published = PublishedPorts(compose);
         if (published.Count != 1 || !published.ContainsKey("traefik"))
@@ -12,34 +15,122 @@ internal static partial class PublicationValidator
             throw new InvalidOperationException(
                 "Only Traefik may publish host ports by default.");
         }
-        foreach (var required in new[]
+        var traefikPorts = published["traefik"];
+        if (traefikPorts.Count != 2
+            || !traefikPorts.Contains($"{expectedHttpPort}:80")
+            || !traefikPorts.Contains($"{expectedHttpsPort}:443"))
         {
-            "TRAEFIK_API_INSECURE: \"false\"",
-            "ASPIRE_DASHBOARD_FORWARDEDHEADERS_ENABLED: \"true\"",
-            "DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: \"true\"",
-            "DUPLICATI__WEBSERVICE_ALLOWED_HOSTNAMES: \"*\"",
-            "AUTHELIA_SESSION_SECRET_FILE: \"/secrets/session-secret\"",
-            "AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE: \"/secrets/storage-encryption-key\"",
-            "DIUN_NOTIF_WEBHOOK_ENDPOINT: \"http://notifier:8080/diun\"",
-            "NOTIFIER_URL: \"http://notifier:8080\"",
-            "CF_DNS_API_TOKEN: \"${CLOUDFLARE_DNS_API_TOKEN}\"",
-            "TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_STORAGE: \"/acme/acme.json\"",
-            "TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_DNSCHALLENGE: \"true\"",
-            "TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_DNSCHALLENGE_RESOLVERS: \"1.1.1.1:53,8.8.8.8:53\"",
-            "network_mode: \"service:gluetun\"",
-        })
-        {
-            if (!compose.Contains(required, StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException(
-                    $"Published Compose is missing required setting: {required}");
-            }
+            throw new InvalidOperationException(
+                "Traefik must publish exactly the configured HTTP and HTTPS ports.");
         }
-        if (compose.Contains("TRAEFIK_API_INSECURE: \"true\"", StringComparison.Ordinal))
+
+        RequireSettings(
+            ServiceSection(compose, "traefik"),
+            "traefik",
+            [
+                "TRAEFIK_API_INSECURE: \"false\"",
+                "TRAEFIK_ENTRYPOINTS_WEB_HTTP_REDIRECTIONS_ENTRYPOINT_SCHEME: \"https\"",
+                "TRAEFIK_ENTRYPOINTS_WEB_HTTP_REDIRECTIONS_ENTRYPOINT_TO:",
+                "CF_DNS_API_TOKEN: \"${CLOUDFLARE_DNS_API_TOKEN}\"",
+                "TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_STORAGE: \"/acme/acme.json\"",
+                "TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_DNSCHALLENGE: \"true\"",
+                "TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_DNSCHALLENGE_RESOLVERS: \"1.1.1.1:53,8.8.8.8:53\"",
+            ]);
+        var traefik = ServiceSection(compose, "traefik");
+        if (traefik.Contains(
+            "TRAEFIK_API_INSECURE: \"true\"",
+            StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
                 "Published Compose enables the insecure Traefik API.");
         }
+        if (traefik.Contains(
+            "/etc/traefik/traefik.yml",
+            StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "Traefik static configuration must come from one source.");
+        }
+
+        RequireSettings(
+            ServiceSection(compose, "arrspire-dashboard"),
+            "arrspire-dashboard",
+            [
+                "ASPIRE_DASHBOARD_FORWARDEDHEADERS_ENABLED: \"true\"",
+                "DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: \"true\"",
+            ]);
+        RequireSettings(
+            ServiceSection(compose, "duplicati"),
+            "duplicati",
+            ["DUPLICATI__WEBSERVICE_ALLOWED_HOSTNAMES: \"*\""]);
+        RequireSettings(
+            ServiceSection(compose, "authelia"),
+            "authelia",
+            [
+                "AUTHELIA_SESSION_SECRET_FILE: \"/secrets/session-secret\"",
+                "AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE: \"/secrets/storage-encryption-key\"",
+            ]);
+        RequireSettings(
+            ServiceSection(compose, "diun"),
+            "diun",
+            ["DIUN_NOTIF_WEBHOOK_ENDPOINT: \"http://notifier:8080/diun\""]);
+        RequireSettings(
+            ServiceSection(compose, "reconciler"),
+            "reconciler",
+            ["NOTIFIER_URL: \"http://notifier:8080\""]);
+        RequireSettings(
+            ServiceSection(compose, "qbittorrent"),
+            "qbittorrent",
+            ["network_mode: \"service:gluetun\""]);
+        RequireSettings(
+            ServiceSection(compose, "prowlarr"),
+            "prowlarr",
+            ["network_mode: \"service:gluetun\""]);
+
+        var homepage = ServiceSection(compose, "homepage");
+        RequireSettings(
+            homepage,
+            "homepage",
+            [
+                "HOMEPAGE_ALLOWED_HOSTS:",
+                "target: \"/app/config\"",
+                "read_only: true",
+            ]);
+
+        var notifier = ServiceSection(compose, "notifier");
+        RequireSettings(
+            notifier,
+            "notifier",
+            [
+                "NTFY_TOKEN: \"${NTFY_TOKEN}\"",
+                "ARRSPIRE_HOME_URL: \"https://",
+            ]);
+        if (notifier.Contains(
+            "ARRSPIRE_HOME_URL: \"http://homepage",
+            StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "Notification links must use the public HTTPS ingress.");
+        }
+        if (notifier.Contains("target: \"/media\"", StringComparison.Ordinal)
+            || notifier.Contains("target: \"/downloads\"", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "The notification relay must not receive media or download mounts.");
+        }
+
+        foreach (var required in new[]
+        {
+            "homepage", "notifier", "reconciler", "bootstrap",
+        })
+        {
+            if (string.IsNullOrEmpty(ServiceSection(compose, required)))
+            {
+                throw new InvalidOperationException(
+                    $"Published Compose is missing required service: {required}");
+            }
+        }
+
         foreach (Match match in ImageRegex().Matches(compose))
         {
             var image = match.Groups[1].Value;
@@ -48,6 +139,48 @@ internal static partial class PublicationValidator
             {
                 throw new InvalidOperationException(
                     $"Published image is not immutable: {image}");
+            }
+        }
+    }
+
+    internal static string ServiceSection(string compose, string service)
+    {
+        var lines = compose.Split('\n');
+        var start = Array.FindIndex(
+            lines,
+            line => line.TrimEnd('\r') == $"  {service}:");
+        if (start < 0)
+        {
+            return string.Empty;
+        }
+
+        var end = start + 1;
+        while (end < lines.Length
+            && (!lines[end].StartsWith("  ", StringComparison.Ordinal)
+                || lines[end].StartsWith("    ", StringComparison.Ordinal)
+                || string.IsNullOrWhiteSpace(lines[end])))
+        {
+            end++;
+        }
+        return string.Join('\n', lines[start..end]);
+    }
+
+    private static void RequireSettings(
+        string section,
+        string service,
+        IEnumerable<string> settings)
+    {
+        if (section.Length == 0)
+        {
+            throw new InvalidOperationException(
+                $"Published Compose is missing required service: {service}");
+        }
+        foreach (var setting in settings)
+        {
+            if (!section.Contains(setting, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"{service} is missing required setting: {setting}");
             }
         }
     }

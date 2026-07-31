@@ -17,19 +17,34 @@ internal static partial class VpnCleanup
         var runtime = configured is "docker" or "podman"
             ? configured
             : "docker";
+        var failures = new List<string>();
         foreach (var service in new[] { "qbittorrent", "prowlarr", "gluetun" })
         {
-            var exitCode = await ProcessRunner.InheritAsync(
+            var name = $"arrspire-{instance}-{service}";
+            var result = await ProcessRunner.CaptureAsync(
                 runtime,
-                ["rm", "--force", $"arrspire-{instance}-{service}"],
+                ["rm", "--force", name],
                 Environment.CurrentDirectory);
-            if (exitCode != 0)
+            if (result.ExitCode != 0
+                && !IsMissingContainer(result.StandardError + result.StandardOutput))
             {
-                return exitCode;
+                failures.Add($"{name}: {result.StandardError.Trim()}");
             }
         }
-        return 0;
+        if (failures.Count == 0)
+        {
+            return 0;
+        }
+        Console.Error.WriteLine(string.Join(Environment.NewLine, failures));
+        return 1;
     }
+
+    internal static bool IsMissingContainer(string output)
+        => output.Contains("No such container", StringComparison.OrdinalIgnoreCase)
+            || output.Contains(
+                "no container with name or ID",
+                StringComparison.OrdinalIgnoreCase)
+            || output.Contains("does not exist", StringComparison.OrdinalIgnoreCase);
 
     [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")]
     private static partial Regex InstanceRegex();

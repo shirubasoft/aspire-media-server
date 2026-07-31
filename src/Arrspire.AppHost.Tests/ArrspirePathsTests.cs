@@ -122,6 +122,41 @@ public sealed class ArrspirePathsTests
         }
     }
 
+    [Fact]
+    public void RejectsSymlinkAliasesThatOverlap()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            $"arrspire-symlink-paths-{Guid.NewGuid():N}");
+        var shared = Path.Combine(root, "shared");
+        var media = Path.Combine(shared, "media");
+        var downloads = Path.Combine(root, "downloads");
+        var alias = Path.Combine(root, "data-alias");
+        Directory.CreateDirectory(media);
+        Directory.CreateDirectory(downloads);
+        Directory.CreateSymbolicLink(alias, shared);
+        try
+        {
+            Assert.Throws<InvalidOperationException>(() =>
+                ArrspirePaths.ValidateLayout(new Dictionary<string, string>
+                {
+                    ["data"] = alias,
+                    ["media"] = media,
+                    ["downloads"] = downloads,
+                }));
+        }
+        finally
+        {
+            Directory.Delete(alias);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [SupportedOSPlatform("linux")]
     private static void AssertRootlessModes(ArrspirePaths paths)
         => Assert.All(

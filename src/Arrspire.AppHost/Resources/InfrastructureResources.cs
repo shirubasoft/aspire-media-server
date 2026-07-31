@@ -112,18 +112,6 @@ internal static class InfrastructureResources
                     "TRAEFIK_ENTRYPOINTS_WEB_HTTP_REDIRECTIONS_ENTRYPOINT_TO"] =
                     $":{httpsPort}";
             })
-            .WithContainerFiles(
-                "/etc/traefik",
-                (_, _) => Task.FromResult<IEnumerable<ContainerFileSystemItem>>(
-                [
-                    new ContainerFile
-                    {
-                        Name = "traefik.yml",
-                        Contents = TraefikStaticConfiguration(),
-                        Mode = UnixFileMode.UserRead | UnixFileMode.UserWrite
-                            | UnixFileMode.GroupRead | UnixFileMode.OtherRead,
-                    },
-                ]))
             .WithComposeRestart();
 
         return new TraefikHandle(
@@ -242,24 +230,4 @@ internal static class InfrastructureResources
         return resource.HttpHandle("homepage");
     }
 
-    internal static string TraefikStaticConfiguration()
-        => $$"""
-            api:
-              dashboard: true
-              insecure: false
-            ping: {}
-            entryPoints:
-              web:
-                address: ":80"
-              websecure:
-                address: ":443"
-            providers:
-              file:
-                directory: /etc/traefik/dynamic
-                watch: true
-            accessLog:
-              filePath: /var/log/traefik/access.log
-              format: common
-
-            """;
 }

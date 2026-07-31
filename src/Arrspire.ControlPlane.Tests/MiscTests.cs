@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Arrspire.ControlPlane.Tests;
 
 public sealed class MiscTests
@@ -47,5 +49,86 @@ public sealed class MiscTests
         })!.ToString();
         Assert.DoesNotContain("visible", redacted);
         Assert.DoesNotContain("user:pass", redacted);
+    }
+
+    [Fact]
+    public async Task RetryTreatsHttpTimeoutAsTransient()
+    {
+        var attempts = 0;
+        var result = await Retry.ExecuteAsync(
+            _ => ++attempts == 1
+                ? Task.FromException<int>(new TaskCanceledException("timeout"))
+                : Task.FromResult(42),
+            attempts: 2,
+            initialDelay: TimeSpan.Zero,
+            maximumDelay: TimeSpan.Zero,
+            CancellationToken.None,
+            (_, _) => Task.CompletedTask);
+
+        Assert.Equal(42, result);
+        Assert.Equal(2, attempts);
+    }
+
+    [Fact]
+    public async Task RetryDoesNotSwallowCallerCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var attempts = 0;
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            Retry.ExecuteAsync(
+                _ =>
+                {
+                    attempts++;
+                    return Task.FromCanceled<int>(cancellation.Token);
+                },
+                attempts: 3,
+                initialDelay: TimeSpan.Zero,
+                maximumDelay: TimeSpan.Zero,
+                cancellation.Token,
+                (_, _) => Task.CompletedTask));
+        Assert.Equal(1, attempts);
+    }
+
+    [Fact]
+    public async Task NotificationStateRoundTripsCamelCaseJson()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            $"arrspire-notification-{Guid.NewGuid():N}");
+        var path = Path.Combine(root, "state.json");
+        try
+        {
+            var expected = new NotificationState(1, "failed", "fingerprint");
+            await NotificationRelay.WriteStateAsync(
+                path,
+                expected,
+                CancellationToken.None);
+
+            Assert.Equal(
+                expected,
+                await NotificationRelay.ReadStateAsync(
+                    path,
+                    CancellationToken.None));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void NotificationDeliverySerializesItsApiContract()
+    {
+        var json = JsonSerializer.Serialize(
+            new NotificationDelivery(true, false),
+            JsonDefaults.Compact);
+
+        Assert.Contains("\"configured\":true", json);
+        Assert.Contains("\"sent\":false", json);
     }
 }

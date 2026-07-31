@@ -15,6 +15,10 @@ internal static partial class LocalTls
 
     public static async Task<int> RunAsync(string root, IReadOnlyList<string> args)
     {
+        var tlsMode = Environment.GetEnvironmentVariable(
+                "Parameters__traefik_tls_mode")
+            ?? "local";
+        ValidateMode(tlsMode);
         var domain = args.FirstOrDefault()
             ?? Environment.GetEnvironmentVariable("Parameters__traefik_domain")
             ?? Ingress.DefaultTraefikDomain;
@@ -129,6 +133,15 @@ internal static partial class LocalTls
         if (domain.Length > 253 || !DomainRegex().IsMatch(domain))
         {
             throw new InvalidOperationException($"Invalid local TLS domain: {domain}");
+        }
+    }
+
+    internal static void ValidateMode(string mode)
+    {
+        if (mode != "local")
+        {
+            throw new InvalidOperationException(
+                $"Local CA generation is disabled when traefik-tls-mode is {mode}");
         }
     }
 

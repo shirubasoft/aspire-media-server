@@ -14,6 +14,13 @@ internal sealed record NtfyConfiguration(
     string? Token,
     string? Click);
 
+internal sealed record NotificationDelivery(bool Configured, bool Sent);
+
+internal sealed record NotificationState(
+    int SchemaVersion,
+    string Status,
+    string Fingerprint);
+
 internal static partial class NotificationRelay
 {
     private const string StatePath = "/data/status/notification-state.json";
@@ -55,7 +62,7 @@ internal static partial class NotificationRelay
             EmptyToNull(Value(environment, "ARRSPIRE_HOME_URL")));
     }
 
-    public static async Task<(bool Configured, bool Sent)> NotifyReconciliationAsync(
+    public static async Task<NotificationDelivery> NotifyReconciliationAsync(
         IReadOnlyList<ReconciliationResult> results,
         NtfyConfiguration? configuration = null,
         string statePath = StatePath,
@@ -64,7 +71,7 @@ internal static partial class NotificationRelay
         configuration ??= Configuration();
         if (configuration is null)
         {
-            return (false, false);
+            return new(false, false);
         }
 
         var status = Status.Classify(results).ToString().ToLowerInvariant();
@@ -110,7 +117,7 @@ internal static partial class NotificationRelay
             statePath,
             new NotificationState(1, status, fingerprint),
             cancellationToken);
-        return (true, recovered || degraded);
+        return new(true, recovered || degraded);
     }
 
     public static async Task RunAsync(CancellationToken cancellationToken)
@@ -274,14 +281,15 @@ internal static partial class NotificationRelay
             SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(normalized)));
     }
 
-    private static async Task<NotificationState?> ReadStateAsync(
+    internal static async Task<NotificationState?> ReadStateAsync(
         string path,
         CancellationToken cancellationToken)
     {
         try
         {
             return JsonSerializer.Deserialize<NotificationState>(
-                await AtomicFiles.ReadIfExistsAsync(path, cancellationToken) ?? "");
+                await AtomicFiles.ReadIfExistsAsync(path, cancellationToken) ?? "",
+                JsonDefaults.Compact);
         }
         catch (JsonException)
         {
@@ -289,7 +297,7 @@ internal static partial class NotificationRelay
         }
     }
 
-    private static Task WriteStateAsync(
+    internal static Task WriteStateAsync(
         string path,
         NotificationState state,
         CancellationToken cancellationToken)
@@ -321,8 +329,6 @@ internal static partial class NotificationRelay
         => environment.TryGetValue(name, out var value) ? value?.Trim() ?? "" : "";
 
     private static string? EmptyToNull(string value) => value.Length == 0 ? null : value;
-
-    private sealed record NotificationState(int SchemaVersion, string Status, string Fingerprint);
 
     [GeneratedRegex("^[A-Za-z0-9_-]{1,64}$")]
     private static partial Regex TopicRegex();

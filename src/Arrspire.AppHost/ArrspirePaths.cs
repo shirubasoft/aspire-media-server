@@ -90,7 +90,7 @@ internal sealed record ArrspirePaths(
         var entries = paths
             .Select(pair => new KeyValuePair<string, string>(
                 pair.Key,
-                Path.TrimEndingDirectorySeparator(Path.GetFullPath(pair.Value))))
+                CanonicalPath(pair.Value)))
             .ToArray();
 
         for (var index = 0; index < entries.Length; index++)
@@ -160,7 +160,34 @@ internal sealed record ArrspirePaths(
             throw new InvalidOperationException($"{name} path is not a directory: {path}");
         }
 
-        return info.FullName;
+        return CanonicalPath(info.FullName);
+    }
+
+    private static string CanonicalPath(string path)
+    {
+        var fullPath = Path.GetFullPath(path);
+        if (!Directory.Exists(fullPath))
+        {
+            return Path.TrimEndingDirectorySeparator(fullPath);
+        }
+
+        var root = Path.GetPathRoot(fullPath)
+            ?? throw new InvalidOperationException($"Path has no root: {path}");
+        var current = root;
+        foreach (var segment in fullPath[root.Length..].Split(
+            [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+            StringSplitOptions.RemoveEmptyEntries))
+        {
+            current = Path.Combine(current, segment);
+            var resolved = new DirectoryInfo(current).ResolveLinkTarget(
+                returnFinalTarget: true);
+            if (resolved is not null)
+            {
+                current = resolved.FullName;
+            }
+        }
+
+        return Path.TrimEndingDirectorySeparator(Path.GetFullPath(current));
     }
 
     [SupportedOSPlatform("linux")]

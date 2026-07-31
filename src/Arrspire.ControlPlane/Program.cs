@@ -1,11 +1,11 @@
 using Arrspire.ControlPlane;
 
+using var cancellation = new CancellationTokenSource();
 try
 {
     var command = args.FirstOrDefault()
         ?? throw new InvalidOperationException(
             "Expected bootstrap, reconcile, serve-notifications, or verify.");
-    using var cancellation = new CancellationTokenSource();
     Console.CancelKeyPress += (_, eventArgs) =>
     {
         eventArgs.Cancel = true;
@@ -36,7 +36,7 @@ try
                 $"Expected bootstrap, reconcile, serve-notifications, or verify; received {command}.");
     }
 }
-catch (OperationCanceledException)
+catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
 {
     Log.Info("Control plane stopped");
 }

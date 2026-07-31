@@ -1,4 +1,6 @@
 using System.Text.RegularExpressions;
+using System.Net;
+using System.Net.Sockets;
 
 namespace Arrspire.Operator;
 
@@ -16,6 +18,7 @@ internal static partial class Firewall
             "ip", ["-4", "route"], root);
         var cidr = Environment.GetEnvironmentVariable("ARRSPIRE_LAN_CIDR")
             ?? LanIpv4Cidr(routes);
+        ValidateIpv4Cidr(cidr);
         var exitCode = await ProcessRunner.InheritAsync(
             "pkexec",
             [
@@ -57,11 +60,25 @@ internal static partial class Firewall
             if (fields.Length > 0 && dev >= 0 && dev + 1 < fields.Length
                 && fields[dev + 1] == device && CidrRegex().IsMatch(fields[0]))
             {
+                ValidateIpv4Cidr(fields[0]);
                 return fields[0];
             }
         }
         throw new InvalidOperationException(
             $"Could not determine the LAN subnet for {device}.");
+    }
+
+    internal static void ValidateIpv4Cidr(string cidr)
+    {
+        var parts = cidr.Split('/', 2);
+        if (parts.Length != 2
+            || !IPAddress.TryParse(parts[0], out var address)
+            || address.AddressFamily != AddressFamily.InterNetwork
+            || !int.TryParse(parts[1], out var prefix)
+            || prefix is < 0 or > 32)
+        {
+            throw new InvalidOperationException($"Invalid IPv4 CIDR: {cidr}");
+        }
     }
 
     [GeneratedRegex(@"default(?: via \S+)? dev (\S+)", RegexOptions.Multiline)]

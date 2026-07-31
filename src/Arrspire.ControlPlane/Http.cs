@@ -100,7 +100,9 @@ internal static class Http
                 Log.Info("Service is ready", new { service = name, attempt });
                 return;
             }
-            catch (Exception exception) when (exception is not OperationCanceledException)
+            catch (Exception exception) when (
+                exception is not OperationCanceledException
+                || !cancellationToken.IsCancellationRequested)
             {
                 lastError = exception;
                 if (attempt == 1 || attempt % 10 == 0)

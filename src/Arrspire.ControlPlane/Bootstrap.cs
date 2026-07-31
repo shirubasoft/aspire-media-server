@@ -706,17 +706,46 @@ internal static class UnixOwnership
             return;
         }
 
-        ChownCore(path, uid, gid);
-        if (recursive && Directory.Exists(path))
+        ChownEntry(path, uid, gid, recursive);
+    }
+
+    private static void ChownEntry(
+        string path,
+        uint uid,
+        uint gid,
+        bool recursive)
+    {
+        var info = FileSystemInfo(path);
+        if (info.LinkTarget is not null)
         {
-            foreach (var child in Directory.EnumerateFileSystemEntries(
-                path,
-                "*",
-                SearchOption.AllDirectories))
-            {
-                ChownCore(child, uid, gid);
-            }
+            LchownCore(path, uid, gid);
+            return;
         }
+
+        ChownCore(path, uid, gid);
+        if (!recursive || info is not DirectoryInfo)
+        {
+            return;
+        }
+
+        foreach (var child in Directory.EnumerateFileSystemEntries(path))
+        {
+            ChownEntry(child, uid, gid, recursive: true);
+        }
+    }
+
+    private static FileSystemInfo FileSystemInfo(string path)
+    {
+        var directory = new DirectoryInfo(path);
+        directory.Refresh();
+        if (directory.Exists || directory.LinkTarget is not null)
+        {
+            return directory;
+        }
+
+        var file = new FileInfo(path);
+        file.Refresh();
+        return file;
     }
 
     private static void ChownCore(string path, uint uid, uint gid)
@@ -728,8 +757,23 @@ internal static class UnixOwnership
         }
     }
 
+    private static void LchownCore(string path, uint uid, uint gid)
+    {
+        if (lchown(path, uid, gid) != 0)
+        {
+            throw new IOException(
+                $"lchown failed for {path}: {Marshal.GetLastPInvokeErrorMessage()}");
+        }
+    }
+
     [DllImport("libc", SetLastError = true)]
     private static extern int chown(
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string path,
+        uint owner,
+        uint group);
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern int lchown(
         [MarshalAs(UnmanagedType.LPUTF8Str)] string path,
         uint owner,
         uint group);

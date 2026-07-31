@@ -54,6 +54,26 @@ internal static partial class DeploymentSupport
         };
     }
 
+    public static IReadOnlyList<string> ComposeArguments(
+        string? project,
+        string environmentFile,
+        string composeFile,
+        IReadOnlyList<string> command)
+    {
+        var arguments = new List<string> { "compose" };
+        if (!string.IsNullOrWhiteSpace(project))
+        {
+            arguments.AddRange(["--project-name", project]);
+        }
+        arguments.AddRange(
+        [
+            "--env-file", environmentFile,
+            "--file", composeFile,
+        ]);
+        arguments.AddRange(command);
+        return arguments;
+    }
+
     public static PodmanRecovery? PodmanRecoveryPlan(
         string containersJson,
         string project)
@@ -176,6 +196,7 @@ internal static partial class DeploymentSupport
         var timeout = int.TryParse(
             Environment.GetEnvironmentVariable("ARRSPIRE_DEPLOY_VERIFY_TIMEOUT_MS"),
             out var configured)
+            && configured > 0
             ? configured
             : 180_000;
         var deadline = DateTimeOffset.UtcNow.AddMilliseconds(timeout);
@@ -186,8 +207,11 @@ internal static partial class DeploymentSupport
             {
                 var root = await IngressStatusAsync(domain, port, address);
                 var auth = await IngressStatusAsync($"auth.{domain}", port, address);
-                if (root.StatusCode == HttpStatusCode.Redirect
-                    && root.Location?.Host == $"auth.{domain}"
+                if (IsExpectedHomepageRedirect(
+                        root.StatusCode,
+                        root.Location,
+                        domain,
+                        port)
                     && auth.StatusCode == HttpStatusCode.OK)
                 {
                     Console.WriteLine(
@@ -204,6 +228,22 @@ internal static partial class DeploymentSupport
         throw new InvalidOperationException(
             $"Homepage verification timed out: {lastError?.Message}");
     }
+
+    internal static bool IsExpectedHomepageRedirect(
+        HttpStatusCode status,
+        Uri? location,
+        string domain,
+        int port)
+        => status == HttpStatusCode.Redirect
+            && location is not null
+            && location.IsAbsoluteUri
+            && location.Scheme == Uri.UriSchemeHttps
+            && string.Equals(
+                location.Host,
+                $"auth.{domain}",
+                StringComparison.OrdinalIgnoreCase)
+            && location.Port == port
+            && location.AbsolutePath == "/";
 
     private static IEnumerable<string> ConfigFiles(JsonElement value)
         => value.ValueKind switch

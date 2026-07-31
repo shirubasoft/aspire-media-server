@@ -9,7 +9,7 @@ builder.Configuration.AddUserSecrets("arrspire-apphost");
 builder.AddDockerComposeEnvironment("arrspire")
     .WithDashboard(dashboard => dashboard
         .WithImageSHA256(
-            ArrspireImages.AspireDashboardDigest)
+            ArrspireImages.AspireDashboardDigest["sha256:".Length..])
         .WithForwardedHeaders(true)
         .WithHostPort(null)
         .WithEnvironment(

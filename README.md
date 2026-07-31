@@ -85,8 +85,8 @@ live endpoint through an endpoint expression, show it through Aspire's
 The C# AppHost uses features that were unavailable to the former TypeScript
 AppHost:
 
-- `WithContainerFiles` generates Traefik's static configuration without a
-  host-side staging directory.
+- Traefik uses one environment-based static configuration source, while its
+  generated routing and TLS files remain on the dynamic configuration mount.
 - Docker Compose publication callbacks set restart policies, devices,
   capabilities, service-network mode, and dashboard settings.
 - endpoint expressions flow live service URLs into the C# control plane and

@@ -214,7 +214,6 @@ internal static partial class VpnResources
             .AddProject<Projects.Arrspire_ContainerRunner>($"{name}-vpn")
             .WithArgs(runArguments.ToArray())
             .WithRequiredCommand(runtime)
-            .WithRequiredCommand("setsid")
             .WaitFor(gluetun.Resource);
         return new VpnRoutedHandle(name, runner.AsResource(), compose, http);
     }

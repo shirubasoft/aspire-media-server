@@ -25,12 +25,10 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
         with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: src/package-lock.json
+          dotnet-version: 10.0.x
 
       - name: Install Aspire CLI
         working-directory: .
@@ -38,17 +36,11 @@ jobs:
           curl -sSL https://aspire.dev/install.sh | bash
           echo "$HOME/.aspire/bin" >> "$GITHUB_PATH"
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Build
+        run: dotnet build Arrspire.slnx --configuration Release
 
-      - name: Build and lint
-        run: npm run build
-
-      - name: Validate immutable container images
-        run: npm run images:check
-
-      - name: Run unit tests
-        run: npm run test:unit
+      - name: Run tests
+        run: dotnet test Arrspire.slnx --configuration Release --no-build
 
       - name: Validate deployment plan with a host-non-writable bind mount
         shell: bash
@@ -56,6 +48,10 @@ jobs:
           test_root="$(mktemp -d)"
           cleanup() {
             chmod u+w "$test_root/downloads"
+            rmdir \
+              "$test_root/media/movies" \
+              "$test_root/media/tv" \
+              "$test_root/media/music"
             rmdir "$test_root/data" "$test_root/media" "$test_root/downloads"
             rmdir "$test_root"
           }
@@ -68,7 +64,11 @@ jobs:
             aspire deploy --list-steps --non-interactive
 
       - name: Validate Compose publication
-        run: npm run publish && npm run publication:check
+        run: |
+          ARRSPIRE_DATA_PATH="${RUNNER_TEMP}/arrspire-publish/data" \
+          ARRSPIRE_MEDIA_PATH="${RUNNER_TEMP}/arrspire-publish/media" \
+          ARRSPIRE_DOWNLOADS_PATH="${RUNNER_TEMP}/arrspire-publish/downloads" \
+            dotnet run --project Arrspire.Operator --configuration Release -- publish
 
   e2e:
     if: >-
@@ -94,6 +94,11 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: src/package-lock.json
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
 
       - name: Install Aspire CLI
         working-directory: .

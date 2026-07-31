@@ -1,260 +1,128 @@
 # Arrspire
 
-Arrspire is a TypeScript Aspire AppHost for a self-configuring media stack. It
-models every service as its own domain type, starts the containers in dependency
-order, and reconciles the real service APIs without Python setup scripts.
+Arrspire is a C# Aspire AppHost for a self-configuring media server. It models
+the complete stack, bootstraps persisted configuration, reconciles the real
+service APIs, exposes one authenticated HTTPS ingress, and publishes the same
+graph to Docker or Podman Compose.
 
-The AppHost targets the current stable Aspire CLI and has been validated with
-Aspire 13.4.6.
+The production path is fully .NET:
 
-## Stack
+- `Arrspire.AppHost` declares resources and publication behavior.
+- `Arrspire.ControlPlane` performs bootstrap, reconciliation, acceptance, and
+  notification relay work.
+- `Arrspire.ContainerRunner` safely manages the two containers that share
+  Gluetun's network namespace during local Aspire runs.
+- `Arrspire.Operator` provides setup, diagnostics, TLS, deployment, status,
+  repair, firewall, locale, and cleanup commands.
 
-- Gluetun VPN, qBittorrent, Prowlarr
-- Sonarr, Radarr, Lidarr, Bazarr
-- Jellyfin, Seerr, Recyclarr
-- Duplicati, Tdarr, Diun
-- Traefik, Authelia, Fail2ban
-- Homepage, Prometheus, Grafana, and the Aspire dashboard
+TypeScript is used only by the Playwright browser acceptance test.
 
-The bootstrap creates stable API keys and initial configuration files before
-services start. The reconciler then connects qBittorrent to the Arr apps,
-Prowlarr to every Arr app, Bazarr to Sonarr and Radarr, Seerr to Jellyfin
-and the Arr apps, and Jellyfin to Bazarr and Seerr. It also installs the
-pinned Jellyfin plugin set with verified checksums and writes the Authelia,
-Recyclarr, Traefik, Fail2ban, Prometheus, and Grafana configuration.
+## Requirements
 
-## First run
+- .NET 10 SDK
+- Aspire CLI 13.4 or newer
+- Docker or Podman, including Compose
+- OpenSSL and `certutil` for locally trusted TLS
+- A WireGuard private key supported by Gluetun
 
-Prerequisites are Node.js 22+, a working Docker or Podman installation, Compose,
-and the latest stable Aspire CLI.
+## Quick start
+
+Run commands from `src`:
 
 ```bash
 cd src
-npm ci
-aspire restore --non-interactive
-npm run setup
-npm run doctor
-npm run dev
+dotnet run --project Arrspire.Operator -- setup
+dotnet run --project Arrspire.Operator -- doctor
+dotnet build Arrspire.slnx
+aspire start
 ```
 
-The guided setup masks secret input, validates all answers before writing,
-persists service parameters in Aspire's local secret store, and saves only
-non-secret path choices in ignored `.arrspire/config.json`. The VPN key is the
-only value without a safe default. Aspire generates and persists the
-central sign-in, Jellyfin, qBittorrent, Duplicati, and Grafana passwords, plus
-Authelia's session and storage keys. Existing values under `~/.aspire` are
-reused automatically.
-
-`npm run doctor` is read-only. It checks the Node/Aspire/container runtime,
-Compose, VPN key shape, bind-mount permissions and capacity, socket, ingress
-ports, DNS, TLS, optional ntfy configuration, and persisted readiness. Each
-warning or failure includes the next corrective command.
-
-Runtime data defaults to `data/` in this repository, media to `~/media`, and
-downloads to `~/downloads`. Override them without editing the AppHost:
+For unattended setup, supply protected `Parameters__*` environment variables:
 
 ```bash
-ARRSPIRE_DATA_PATH=/srv/arrspire \
-ARRSPIRE_MEDIA_PATH=/srv/media \
-ARRSPIRE_DOWNLOADS_PATH=/srv/downloads \
-npm run dev
+Parameters__vpn_wireguard_key="<private-key>" \
+  dotnet run --project Arrspire.Operator -- setup --non-interactive
 ```
 
-Environment variables take precedence over `.arrspire/config.json`. For
-automation, protected `Parameters__*` variables and path overrides can drive
-the same validated workflow with `npm run setup -- --non-interactive`.
+The default ingress domain is `192.168.0.15.nip.io`. Local Docker publishes
+ports 80 and 443; rootless Podman defaults to 8080 and 8443. Override them with
+`ARRSPIRE_INGRESS_HTTP_PORT` and `ARRSPIRE_INGRESS_HTTPS_PORT`.
 
-For local development, override a parameter with
-`aspire secret set "Parameters:<name>" "<value>"`. For deployment, pass the
-same parameter as an environment variable using Aspire's configuration naming,
-for example `Parameters__timezone=UTC npm run deploy`. Useful names include
-`vpn-provider`, `vpn-countries`, `timezone`, `subtitle-languages`,
-`minimum-seeders`, `ntfy-endpoint`, `ntfy-topic`, `ntfy-token`, and the
-supported subtitle-provider credentials. Dashes in parameter names become
-underscores in environment-variable names.
-
-Always use `npm run deploy` for a live deployment. The project deployment
-pipeline refreshes unset `Parameters__*` values from the Aspire secret store;
-calling `aspire deploy` directly bypasses that protection.
-
-The default locale profile keeps the original Portuguese-oriented settings.
-Inspect the neutral baseline or apply it to the local Aspire secret store with:
+Generate and trust the local CA after changing the domain:
 
 ```bash
-npm run locale -- neutral
-npm run locale -- neutral --apply
+dotnet run --project Arrspire.Operator -- tls-local
 ```
 
-Every parameter, provider/country selection, WireGuard key, timezone, locale,
-subtitle list, and host path is validated before the application services are
-allowed to start. Missing optional subtitle credentials are listed as not
-configured without lowering core readiness; a partially supplied
-username/password pair is treated as a configuration error.
+## Deploy and operate
 
-## Access and readiness
-
-Traefik is the only application resource that publishes host ports by default.
-It uses ports 80/443 on rootful Docker or Podman and automatically uses
-unprivileged ports 8080/8443 with rootless Podman. Override the host ports with
-`ARRSPIRE_INGRESS_HTTP_PORT` and `ARRSPIRE_INGRESS_HTTPS_PORT` when needed.
-Traefik redirects HTTP to HTTPS and delegates administrative UI authentication
-to Authelia. The first protected service redirects to `auth.<domain>`, where a
-normal password-manager-friendly form creates one session shared by every
-protected subdomain. The configured domain must be fully qualified; the
-checked-in `server-address.nip.io` form satisfies the browser cookie rules,
-while `localhost` does not. Jellyfin and Seerr retain their own service
-authentication; Duplicati also retains its own login. qBittorrent and Grafana
-keep their application login in addition to the shared Arrspire sign-in. The
-insecure Traefik dashboard and direct service ports are disabled.
-
-After deployment, the access table and readiness summary are printed
-automatically. Rerun them or repair reconciliation after supplying optional
-credentials with:
+Use the C# operator so publication validation, secret-store forwarding, file
+permissions, and readiness reporting remain consistent:
 
 ```bash
-npm run status
-npm run repair
+dotnet run --project Arrspire.Operator -- publish
+dotnet run --project Arrspire.Operator -- deploy
+dotnet run --project Arrspire.Operator -- status
+dotnet run --project Arrspire.Operator -- repair
+dotnet run --project Arrspire.Operator -- down
 ```
 
-The generated Homepage portal is available at the configured bare domain and
-at `home.<domain>`. It groups watch/request, library automation, download,
-processing, and operations surfaces; its Arr and qBittorrent widgets use
-root-only secret files generated during bootstrap. The portal has no direct
-host port and remains behind the shared Arrspire sign-in.
-
-Push notifications are opt-in through any ntfy-compatible server. Set a
-private, hard-to-guess topic and optionally a bearer token:
+Other workflows:
 
 ```bash
-aspire secret set "Parameters:ntfy-topic" "<private-topic>"
-aspire secret set "Parameters:ntfy-token" "<optional-access-token>"
+dotnet run --project Arrspire.Operator -- locale neutral
+dotnet run --project Arrspire.Operator -- locale neutral --apply
+dotnet run --project Arrspire.Operator -- allow-lan
+dotnet run --project Arrspire.Operator -- cleanup-vpn <instance-id>
 ```
 
-Set `Parameters:ntfy-endpoint` when using a self-hosted server. Arrspire then
-notifies on reconciliation degradation, changed failures, recovery, and DIUN
-image updates. Repeated reconciliation runs with the same outcome are
-deduplicated. When no topic is configured, the relay remains a local no-op and
-does not lower readiness.
+The AppHost also places commands on the Homepage resource. They resolve the
+live endpoint through an endpoint expression, show it through Aspire's
+`IInteractionService`, and query Aspire's container runtime integration.
 
-For trusted local-browser HTTPS, generate a stable local certificate and add
-its CA to the current user's browser trust database, then restart the browser:
+## Architecture
 
-```bash
-npm run tls:local
-```
+The C# AppHost uses features that were unavailable to the former TypeScript
+AppHost:
 
-The certificate and private CA stay under ignored
-`data/traefik/dynamic/certs/` with restrictive permissions. Do not copy the
-local CA private key to another machine.
+- Traefik uses one environment-based static configuration source, while its
+  generated routing and TLS files remain on the dynamic configuration mount.
+- Docker Compose publication callbacks set restart policies, devices,
+  capabilities, service-network mode, and dashboard settings.
+- endpoint expressions flow live service URLs into the C# control plane and
+  notification callbacks.
+- `IInteractionService` and custom resource commands provide dashboard-native
+  operator feedback.
+- generated persisted parameters keep secrets stable without a parallel
+  TypeScript configuration layer.
 
-For clients that cannot trust a private CA, Arrspire can instead request
-publicly trusted certificates through Cloudflare DNS and Let's Encrypt. This
-mode remains LAN-only when the DNS records resolve to a private address and no
-router ports are forwarded:
+Bootstrap runs once before dependent services. Reconciliation waits for actual
+service APIs and then configures qBittorrent, Jellyfin, Sonarr, Radarr, Lidarr,
+Prowlarr, Bazarr, Seerr, Tdarr, Duplicati, Recyclarr, Homepage, Traefik,
+Authelia, and notifications. Readiness is written under
+the configured data path in `status/bootstrap.json` and
+`status/reconciliation.json`.
 
-```bash
-Parameters__traefik_domain=home.example.com \
-Parameters__traefik_tls_mode=cloudflare-acme \
-Parameters__traefik_acme_email=operator@example.com \
-Parameters__cloudflare_dns_api_token="<scoped-token>" \
-npm run deploy
-```
-
-Create DNS-only records for the service hostnames (or a scoped wildcard such
-as `*.home.example.com`) pointing to the server's LAN address. When only the
-scoped wildcard exists, the deployment pipeline copies its A/AAAA target into
-the bare `home.example.com` record used by Homepage. The Cloudflare token needs
-only `Zone:Read` and `DNS:Edit` for the selected zone. The domain, email, token,
-server address, and ingress ports are deployment inputs; none are hardcoded
-into the ACME integration. Keep the token out of shell history and source
-control by supplying it through the Aspire secret store or a protected
-deployment environment.
-
-Local Aspire users can rerun the completed reconciler with
-`aspire resource reconciler start --non-interactive`; its structured summary
-remains visible in the Aspire dashboard.
+All application images are pinned by manifest digest. By default, only Traefik
+publishes host ports. qBittorrent and Prowlarr share Gluetun's network
+namespace both locally and in Compose publication.
 
 ## Tests
 
 ```bash
 cd src
-npm test
+dotnet test Arrspire.slnx --configuration Release
+aspire deploy --list-steps --non-interactive
+dotnet run --project Arrspire.Operator -- publish
 ```
 
-The E2E test launches a new isolated copy of the complete stack, waits for the
-TypeScript bootstrap and reconciler, verifies persisted files and the real
-qBittorrent, Arr, Bazarr, Jellyfin, and Seerr APIs, then restarts the same
-stack and verifies it again. It uses no mocks. A configured VPN secret and a
-container engine are required. Because Aspire isolated mode intentionally does
-not reuse user secrets, provide the VPN key explicitly:
+The optional real-stack browser acceptance test remains Playwright-based:
 
 ```bash
-Parameters__vpn_wireguard_key="<wireguard-private-key>" npm test
+npm ci
+npx playwright install chromium
+Parameters__vpn_wireguard_key="<private-key>" npm test
 ```
 
-## Deployment
-
-```bash
-cd src
-npm run deploy
-```
-
-This runs Aspire's native Docker Compose deployment pipeline, which refreshes
-unset deployment parameters from the Aspire secret store, builds the control
-plane, resolves parameters into an environment-specific `.env` file, restricts
-generated files to the current user, selects Docker or Podman, and starts the
-stack. On Podman, it automatically recovers the known Gluetun namespace
-replacement conflict in project scope. Cloudflare ACME deployments reconcile
-the bare Homepage DNS record and wait for trusted TLS, the Homepage-to-Authelia
-redirect, and a healthy sign-in portal before succeeding. Bind-mount paths and
-deployment parameters are materialized automatically. In
-non-interactive environments, explicit `Parameters__*` variables continue to
-take precedence over saved secrets.
-
-To generate the artifact without starting it, run `npm run publish`. To stop a
-deployed stack without deleting its bind-mounted data or named volumes, run
-`npm run deploy:down`.
-
-Set `ARRSPIRE_CONTAINER_ENGINE=docker` or `podman` to override engine detection,
-`ARRSPIRE_CONTAINER_SOCKET` for a nonstandard socket, and
-`ARRSPIRE_OUTPUT_PATH` to move the generated Compose artifact.
-
-The environment-specific `.env.<environment>` generated by deploy contains
-resolved secrets and is ignored by Git. Keep it private and do not copy it into
-source control. `npm run publish` produces a review artifact whose plain `.env`
-contains unresolved placeholders; it is not a deployable secret file.
-
-All application images are pinned to reviewed multi-architecture manifest
-digests. Renovate proposes digest/tag updates as reviewable PRs, and CI runs
-build, unit, publication-security, and real-stack compatibility checks before
-an update is accepted.
-
-See [the operations runbook](docs/operations.md) for the access model, remote
-access threat assumptions, secret inventory, safe rotation and restore
-procedures, image rollback policy, and exact VPN-container recovery.
-
-## Design
-
-The AppHost is split into typed topology, parameters, and resource classes under
-`src/apphost/`. Each resource has a distinct literal kind and endpoint type, so
-Sonarr, Radarr, Lidarr, and Prowlarr cannot be accidentally interchanged while
-still exposing the underlying Aspire builder.
-
-The control plane under `src/control-plane/` is a small compiled TypeScript
-container with four commands:
-
-- `bootstrap` performs deterministic pre-start file setup.
-- `reconcile` waits for real APIs and converges cross-service settings.
-- `serve-notifications` deduplicates state transitions and relays ntfy events.
-- `verify` is the real-stack acceptance suite used by E2E tests.
-
-CI starts an isolated stack twice and complements the API acceptance checks
-with headless Playwright coverage. The browser suite signs in once through
-Authelia, crosses every protected Traefik route without signing in again,
-exercises Jellyfin, Seerr, qBittorrent, Duplicati, and Grafana login flows,
-navigates the Jellyfin libraries, and verifies the Seerr and Grafana
-service-integration screens.
-
-Public tracker registration is best-effort because third-party availability and
-bot protection are outside the stack's control. Core service configuration is
-strict and fails visibly if it cannot converge.
+See [operations.md](docs/operations.md) for parameters, recovery, and migration
+details.

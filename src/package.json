@@ -7,47 +7,26 @@
     "node": "^20.19.0 || ^22.13.0 || >=24"
   },
   "scripts": {
-    "aspire:restore": "aspire restore --non-interactive",
-    "aspire:lint": "eslint apphost.mts apphost/**/*.mts scripts/**/*.mts",
-    "aspire:start": "aspire run",
-    "aspire:build": "tsc -p tsconfig.apphost.json",
-    "aspire:dev": "tsc --watch -p tsconfig.apphost.json",
-    "images:check": "tsx scripts/check-images.mts",
-    "publication:check": "tsx scripts/check-publication.mts",
-    "control-plane:lint": "eslint control-plane/**/*.ts",
-    "control-plane:build": "tsc -p tsconfig.control-plane.json",
-    "control-plane:test": "npm run test:e2e",
-    "lint": "npm run aspire:lint && npm run control-plane:lint",
     "test": "npm run test:e2e",
-    "test:unit": "npm run build && node --test dist/apphost/apphost/test/**/*.test.mjs dist/control-plane/test/**/*.test.js",
-    "test:e2e": "npm run build && node --test --test-concurrency=1 dist/control-plane/test/**/*.e2e.js",
-    "predev": "npm run aspire:restore && npm run lint",
-    "dev": "npm run aspire:start",
-    "prebuild": "npm run aspire:restore && npm run lint",
-    "build": "npm run aspire:build && npm run control-plane:build",
-    "publish": "tsx scripts/deployment.mts publish",
-    "deploy": "tsx scripts/deployment.mts deploy",
-    "deploy:down": "tsx scripts/deployment.mts down",
-    "repair": "tsx scripts/deployment.mts repair",
-    "status": "tsx scripts/deployment.mts status",
-    "setup": "tsx scripts/setup.mts",
-    "doctor": "tsx scripts/doctor.mts",
-    "tls:local": "tsx scripts/local-tls.mts",
-    "network:allow-lan": "tsx scripts/allow-lan.mts",
-    "locale": "tsx scripts/locale-profile.mts",
-    "cleanup:vpn": "tsx scripts/cleanup-vpn.mts",
-    "watch": "npm run aspire:dev"
-  },
-  "dependencies": {
-    "vscode-jsonrpc": "^8.2.0"
+    "test:unit": "dotnet test Arrspire.slnx --configuration Release",
+    "test:e2e": "tsx --test --test-concurrency=1 control-plane/test/stack.e2e.ts",
+    "build": "dotnet build Arrspire.slnx --configuration Release",
+    "dev": "aspire start",
+    "publish": "dotnet run --project Arrspire.Operator -- publish",
+    "deploy": "dotnet run --project Arrspire.Operator -- deploy",
+    "deploy:down": "dotnet run --project Arrspire.Operator -- down",
+    "repair": "dotnet run --project Arrspire.Operator -- repair",
+    "status": "dotnet run --project Arrspire.Operator -- status",
+    "setup": "dotnet run --project Arrspire.Operator -- setup",
+    "doctor": "dotnet run --project Arrspire.Operator -- doctor",
+    "tls:local": "dotnet run --project Arrspire.Operator -- tls-local",
+    "network:allow-lan": "dotnet run --project Arrspire.Operator -- allow-lan",
+    "locale": "dotnet run --project Arrspire.Operator -- locale",
+    "cleanup:vpn": "dotnet run --project Arrspire.Operator -- cleanup-vpn"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "eslint": "^10.0.3",
-    "nodemon": "^3.1.14",
     "playwright": "^1.62.0",
-    "tsx": "^4.21.0",
-    "typescript": "^5.9.3",
-    "typescript-eslint": "^8.57.1"
+    "tsx": "^4.21.0"
   }
 }

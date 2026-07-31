@@ -18,7 +18,6 @@ export interface BrowserAcceptanceOptions {
   readonly jellyfinPassword: string;
   readonly qbittorrentPassword: string;
   readonly duplicatiPassword: string;
-  readonly grafanaPassword: string;
 }
 
 interface BrowserSurface {
@@ -63,12 +62,6 @@ const administrativeSurfaces: readonly BrowserSurface[] = [
     service: "tdarr",
     title: "Tdarr",
     marker: 'input[name="pauseAllNodes"]',
-  },
-  {
-    service: "prometheus",
-    title: "Prometheus",
-    marker: "button",
-    path: "/query",
   },
   {
     service: "traefik",
@@ -179,9 +172,10 @@ async function verifyAspireDashboard(
       }),
     ),
   );
-  assert.ok(
-    (await page.title()).toLowerCase().includes("resources"),
-    `Aspire dashboard rendered an unexpected title: ${await page.title()}`,
+  await page.waitForFunction(
+    () => document.title.toLowerCase().includes("resources"),
+    undefined,
+    { timeout: 30_000 },
   );
 }
 
@@ -204,51 +198,6 @@ async function verifyQBittorrent(
   assert.ok(
     (await page.title()).includes("qBittorrent"),
     "qBittorrent did not render its authenticated WebUI",
-  );
-  await page.close();
-}
-
-async function verifyGrafana(
-  context: BrowserContext,
-  options: BrowserAcceptanceOptions,
-): Promise<void> {
-  const page = await context.newPage();
-  const baseUrl = serviceUrl(options.ingressUrl, options.domain, "grafana");
-  await gotoAvailable(page, baseUrl);
-  await page.locator('input[name="user"]').fill("admin");
-  await page.locator('input[name="password"]').fill(options.grafanaPassword);
-  const [loginResponse] = await Promise.all([
-    page.waitForResponse(
-      (response) =>
-        new URL(response.url()).pathname === "/login" &&
-        response.request().method() === "POST",
-      { timeout: 30_000 },
-    ),
-    page.locator('button[type="submit"]').click(),
-  ]);
-  assert.ok(
-    loginResponse.status() < 400,
-    `Grafana login returned HTTP ${String(loginResponse.status())}`,
-  );
-  await page.waitForURL(
-    (url) => !url.pathname.startsWith("/login"),
-    { timeout: 30_000 },
-  );
-  assert.ok(
-    (await page.title()).includes("Grafana"),
-    "Grafana did not render its authenticated home page",
-  );
-  await page.goto(new URL("/connections/datasources/edit/prometheus", baseUrl).toString(), {
-    waitUntil: "domcontentloaded",
-    timeout: 60_000,
-  });
-  await page.getByText("Prometheus", { exact: true }).first().waitFor({
-    state: "visible",
-    timeout: 30_000,
-  });
-  assert.ok(
-    page.url().includes("/connections/datasources/edit/prometheus"),
-    "Grafana does not expose the provisioned Prometheus data source",
   );
   await page.close();
 }
@@ -385,7 +334,6 @@ export async function verifyBrowserAcceptance(
     await verifyAspireDashboard(administrativePage, options);
     await administrativePage.close();
     await verifyQBittorrent(administrativeContext, options);
-    await verifyGrafana(administrativeContext, options);
     await administrativeContext.close();
 
     const serviceContext = await browser.newContext({

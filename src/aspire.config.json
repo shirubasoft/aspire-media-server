@@ -1,7 +1,7 @@
 {
   "appHost": {
-    "path": "apphost.mts",
-    "language": "typescript/nodejs"
+    "path": "Arrspire.AppHost/Arrspire.AppHost.csproj",
+    "language": "csharp"
   },
   "sdk": {
     "version": "13.4.6"

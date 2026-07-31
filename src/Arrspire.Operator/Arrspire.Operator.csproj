@@ -7,6 +7,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="System.CommandLine" Version="2.0.0" />
     <ProjectReference Include="../Arrspire.AppHost/Arrspire.AppHost.csproj" />
     <ProjectReference Include="../Arrspire.ControlPlane/Arrspire.ControlPlane.csproj" />
   </ItemGroup>

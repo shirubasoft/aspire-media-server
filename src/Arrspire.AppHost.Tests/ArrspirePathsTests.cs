@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Runtime.Versioning;
 using Arrspire.AppHost;
+using Microsoft.Extensions.Configuration;
 
 namespace Arrspire.AppHost.Tests;
 
@@ -45,7 +46,7 @@ public sealed class ArrspirePathsTests
 
         var resolved = ArrspirePaths.Resolve(
             appHostDirectory,
-            new Dictionary<string, string?>(),
+            new ConfigurationBuilder().Build(),
             "/home/test",
             _ => false);
 
@@ -75,9 +76,14 @@ public sealed class ArrspirePathsTests
                     },
                 }));
 
+            var configuration = new ConfigurationBuilder()
+                .AddJsonFile(
+                    Path.Combine(root, ".arrspire", "config.json"),
+                    optional: false)
+                .Build();
             var resolved = ArrspirePaths.Resolve(
                 appHostDirectory,
-                new Dictionary<string, string?>(),
+                configuration,
                 "/home/test",
                 _ => false);
 

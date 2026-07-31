@@ -1,5 +1,5 @@
 using Aspire.Hosting.ApplicationModel;
-using Microsoft.Extensions.Configuration;
+using Aspire.Hosting.Publishing;
 
 namespace Arrspire.AppHost;
 
@@ -15,7 +15,6 @@ internal sealed record ArrspireParameters(
     IResourceBuilder<ParameterResource> QBittorrentPassword,
     IResourceBuilder<ParameterResource> DuplicatiEncryptionKey,
     IResourceBuilder<ParameterResource> DuplicatiWebPassword,
-    IResourceBuilder<ParameterResource> GrafanaAdminPassword,
     IResourceBuilder<ParameterResource> SubtitleLanguages,
     IResourceBuilder<ParameterResource> UseOriginalTitle,
     IResourceBuilder<ParameterResource> MinimumSeeders,
@@ -52,7 +51,6 @@ internal sealed record ArrspireParameters(
             Generated(builder, "qbittorrent-password"),
             Generated(builder, "duplicati-encryption-key", minimumLength: 32),
             Generated(builder, "duplicati-web-password"),
-            Generated(builder, "grafana-admin-password"),
             Plain(builder, "subtitle-languages", "pt-BR"),
             Plain(builder, "use-original-title", "false"),
             Plain(builder, "minimum-seeders", "1"),
@@ -76,39 +74,20 @@ internal sealed record ArrspireParameters(
             Plain(builder, "legendasnet-user", string.Empty),
             SecretWithOptionalValue(builder, "legendasnet-password"));
 
-    public static string ParameterValue(
-        string name,
-        string fallback,
-        IReadOnlyDictionary<string, string?>? environment = null)
-    {
-        environment ??= Environment.GetEnvironmentVariables()
-            .Cast<System.Collections.DictionaryEntry>()
-            .ToDictionary(
-                entry => (string)entry.Key,
-                entry => entry.Value?.ToString(),
-                StringComparer.Ordinal);
-        var environmentName = $"Parameters__{name.Replace('-', '_')}";
-        return environment.TryGetValue(environmentName, out var value) && value is not null
-            ? value
-            : fallback;
-    }
-
     private static IResourceBuilder<ParameterResource> Plain(
         IDistributedApplicationBuilder builder,
         string name,
         string fallback)
         => builder.AddParameter(
             name,
-            ConfiguredValue(builder, name, fallback),
-            publishValueAsDefault: true);
+            new StaticParameterDefault(fallback));
 
     private static IResourceBuilder<ParameterResource> SecretWithOptionalValue(
         IDistributedApplicationBuilder builder,
         string name)
         => builder.AddParameter(
             name,
-            ConfiguredValue(builder, name, string.Empty),
-            publishValueAsDefault: false,
+            new StaticParameterDefault(string.Empty),
             secret: true);
 
     private static IResourceBuilder<ParameterResource> Generated(
@@ -116,16 +95,6 @@ internal sealed record ArrspireParameters(
         string name,
         int minimumLength = 24)
     {
-        var configured = ConfiguredValue(builder, name, string.Empty);
-        if (configured.Length > 0)
-        {
-            return builder.AddParameter(
-                name,
-                configured,
-                publishValueAsDefault: false,
-                secret: true);
-        }
-
         return builder.AddParameter(
             name,
             new GenerateParameterDefault
@@ -142,30 +111,12 @@ internal sealed record ArrspireParameters(
             secret: true,
             persist: true);
     }
+}
 
-    private static string ConfiguredValue(
-        IDistributedApplicationBuilder builder,
-        string name,
-        string fallback)
-        => ConfiguredValue(builder.Configuration, name, fallback);
+internal sealed class StaticParameterDefault(string value) : ParameterDefault
+{
+    public override string GetDefaultValue() => value;
 
-    internal static string ConfiguredValue(
-        IConfiguration configuration,
-        string name,
-        string fallback,
-        IReadOnlyDictionary<string, string?>? environment = null)
-    {
-        environment ??= Environment.GetEnvironmentVariables()
-            .Cast<System.Collections.DictionaryEntry>()
-            .ToDictionary(
-                entry => (string)entry.Key,
-                entry => entry.Value?.ToString(),
-                StringComparer.Ordinal);
-        environment.TryGetValue(
-            $"Parameters__{name.Replace('-', '_')}",
-            out var environmentValue);
-        return environmentValue
-            ?? configuration[$"Parameters:{name}"]
-            ?? fallback;
-    }
+    public override void WriteToManifest(ManifestPublishingContext context)
+        => context.Writer.WriteString("value", value);
 }

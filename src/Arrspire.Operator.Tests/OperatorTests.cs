@@ -198,16 +198,16 @@ public sealed class OperatorTests
         Assert.Throws<InvalidOperationException>(() =>
             PublicationValidator.Validate(
                 compose.Replace(
-                    "      NTFY_TOKEN: \"${NTFY_TOKEN}\"",
-                    "      NTFY_TOKEN: \"literal\"",
+                    "      Ntfy__Token: \"${NTFY_TOKEN}\"",
+                    "      Ntfy__Token: \"literal\"",
                     StringComparison.Ordinal),
                 80,
                 443));
         Assert.Throws<InvalidOperationException>(() =>
             PublicationValidator.Validate(
                 compose.Replace(
-                    "      NTFY_TOKEN: \"${NTFY_TOKEN}\"",
-                    "      NTFY_TOKEN: \"${NTFY_TOKEN}\"\n"
+                    "      Ntfy__Token: \"${NTFY_TOKEN}\"",
+                    "      Ntfy__Token: \"${NTFY_TOKEN}\"\n"
                         + "      target: \"/media\"",
                     StringComparison.Ordinal),
                 80,
@@ -215,8 +215,8 @@ public sealed class OperatorTests
         Assert.Throws<InvalidOperationException>(() =>
             PublicationValidator.Validate(
                 compose.Replace(
-                    "      ARRSPIRE_HOME_URL: \"https://example.com\"",
-                    "      ARRSPIRE_HOME_URL: \"http://homepage:3000\"",
+                    "      Ntfy__Click: \"https://example.com\"",
+                    "      Ntfy__Click: \"http://homepage:3000\"",
                     StringComparison.Ordinal),
                 80,
                 443));
@@ -353,7 +353,7 @@ public sealed class OperatorTests
                  DIUN_NOTIF_WEBHOOK_ENDPOINT: "http://notifier:8080/diun"
              reconciler:
                environment:
-                 NOTIFIER_URL: "http://notifier:8080"
+                 Services__Notifier: "http://notifier:8080"
              qbittorrent:
                network_mode: "service:gluetun"
              prowlarr:
@@ -367,8 +367,8 @@ public sealed class OperatorTests
                    read_only: true
              notifier:
                environment:
-                 NTFY_TOKEN: "${NTFY_TOKEN}"
-                 ARRSPIRE_HOME_URL: "https://example.com"
+                 Ntfy__Token: "${NTFY_TOKEN}"
+                 Ntfy__Click: "https://example.com"
              bootstrap:
                environment: {}
            """;

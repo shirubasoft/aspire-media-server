@@ -1,16 +1,18 @@
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Logging;
 
 namespace Arrspire.ControlPlane;
 
 internal sealed class JellyfinApi(
+    HttpClient client,
+    ILogger logger,
     string baseUrl,
     string username,
     string password,
     string serverName,
     string language)
 {
-    private readonly HttpClient client = new() { Timeout = TimeSpan.FromSeconds(30) };
     private string token = "";
 
     public async Task ReconcileAsync(
@@ -279,7 +281,8 @@ internal sealed class JellyfinApi(
             candidate["Name"]?.GetValue<string>() is { } name && matches(name));
         if (plugin?["Id"]?.GetValue<string>() is not { Length: > 0 } id)
         {
-            Log.Warning("Jellyfin plugin is not loaded; configuration deferred");
+            logger.LogWarning(
+                "Jellyfin plugin is not loaded; configuration deferred");
             return;
         }
 

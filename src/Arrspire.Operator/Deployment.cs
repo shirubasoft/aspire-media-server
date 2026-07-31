@@ -95,6 +95,28 @@ internal static class Deployment
             return 0;
         }
 
+        if (command == "down")
+        {
+            var destroyEnvironment = await SecretEnvironmentAsync(root);
+            if (await TryRuntimeAsync(root) is { } destroyRuntime)
+            {
+                destroyEnvironment["ASPIRE_CONTAINER_RUNTIME"] = destroyRuntime;
+            }
+            return await ProcessRunner.InheritAsync(
+                "aspire",
+                [
+                    "destroy",
+                    "--output-path", output,
+                    "--environment", environment,
+                    "--yes",
+                    "--non-interactive",
+                    "--nologo",
+                    .. arguments,
+                ],
+                root,
+                destroyEnvironment);
+        }
+
         var runtime = await RuntimeAsync(root);
         var compose = Path.Combine(output, "docker-compose.yaml");
         var environmentFile = Path.Combine(output, $".env.{environment}");
@@ -103,12 +125,9 @@ internal static class Deployment
             throw new InvalidOperationException(
                 $"No prepared deployment exists in {output}. Run deploy first.");
         }
-        IReadOnlyList<string> composeCommand = command switch
-        {
-            "down" => ["down", "--remove-orphans"],
-            "repair" => ["run", "--rm", "reconciler"],
-            _ => throw new InvalidOperationException($"Unsupported deployment command: {command}"),
-        };
+        IReadOnlyList<string> composeCommand = command == "repair"
+            ? ["run", "--rm", "--no-deps", "reconciler"]
+            : throw new InvalidOperationException($"Unsupported deployment command: {command}");
         var composeArgs = await ComposeArgumentsAsync(
             runtime,
             root,
@@ -168,7 +187,7 @@ internal static class Deployment
 
     private static async Task<string?> TryRuntimeAsync(string root)
     {
-        var configured = Environment.GetEnvironmentVariable("ARRSPIRE_CONTAINER_ENGINE");
+        var configured = Environment.GetEnvironmentVariable("ASPIRE_CONTAINER_RUNTIME");
         var candidates = configured is "docker" or "podman"
             ? new[] { configured }
             : new[] { "docker", "podman" };
@@ -273,6 +292,17 @@ internal static class Deployment
         string environment,
         string? runtime)
     {
+        var live = await ProcessRunner.CaptureAsync(
+            "aspire",
+            ["describe", "--format", "Table", "--non-interactive", "--nologo"],
+            root);
+        if (live.ExitCode == 0 && !string.IsNullOrWhiteSpace(live.StandardOutput))
+        {
+            Console.WriteLine("Live Aspire resources");
+            Console.WriteLine(live.StandardOutput.TrimEnd());
+            Console.WriteLine();
+        }
+
         var values = ReadEnvironment(Path.Combine(output, $".env.{environment}"));
         var data = values.GetValueOrDefault("BOOTSTRAP_BINDMOUNT_0")
             ?? Environment.GetEnvironmentVariable("ARRSPIRE_DATA_PATH")
@@ -421,8 +451,6 @@ internal static class Deployment
             ("qbittorrent", "qBittorrent", "Arrspire sign-in + service credentials"),
             ("duplicati", "Duplicati", "Service credentials"),
             ("tdarr", "Tdarr", "Arrspire sign-in"),
-            ("prometheus", "Prometheus", "Arrspire sign-in"),
-            ("grafana", "Grafana", "Arrspire sign-in + service credentials"),
             ("aspire", "Aspire dashboard", "Arrspire sign-in"),
             ("traefik", "Traefik dashboard", "Arrspire sign-in"),
         ];
@@ -436,6 +464,5 @@ internal static class Deployment
                 "Parameters:jellyfin-admin-password"),
             ("qBittorrent", "admin", "Parameters:qbittorrent-password"),
             ("Duplicati", "(none)", "Parameters:duplicati-web-password"),
-            ("Grafana", "admin", "Parameters:grafana-admin-password"),
         ];
 }

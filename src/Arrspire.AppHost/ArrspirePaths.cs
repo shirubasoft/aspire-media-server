@@ -1,5 +1,5 @@
-using System.Text.Json;
 using System.Runtime.Versioning;
+using Microsoft.Extensions.Configuration;
 
 namespace Arrspire.AppHost;
 
@@ -12,23 +12,24 @@ internal sealed record ArrspirePaths(
 {
     public static ArrspirePaths Resolve(
         string appHostDirectory,
-        IReadOnlyDictionary<string, string?>? environment = null,
+        IConfiguration? configuration = null,
         string? homeDirectory = null,
         Func<string, bool>? fileExists = null)
     {
-        environment ??= Environment.GetEnvironmentVariables()
-            .Cast<System.Collections.DictionaryEntry>()
-            .ToDictionary(
-                entry => (string)entry.Key,
-                entry => entry.Value?.ToString(),
-                StringComparer.Ordinal);
+        configuration ??= new ConfigurationBuilder()
+            .AddEnvironmentVariables()
+            .Build();
         homeDirectory ??= Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         fileExists ??= File.Exists;
 
         var sourceRoot = Path.GetFullPath(Path.Combine(appHostDirectory, ".."));
         var repositoryRoot = Path.GetFullPath(Path.Combine(sourceRoot, ".."));
-        var operatorConfig = ReadOperatorConfig(sourceRoot)
-            ?? ReadOperatorConfig(appHostDirectory);
+        var hasOperatorPaths = configuration.GetSection("Paths").Exists();
+        if (hasOperatorPaths && configuration.GetValue<int?>("SchemaVersion") != 1)
+        {
+            throw new InvalidOperationException(
+                "Arrspire operator configuration must use schema version 1");
+        }
         var uid = UnixIdentity.UserId;
         var podmanSocket = $"/run/user/{uid}/podman/podman.sock";
         var rootlessPodman =
@@ -37,16 +38,16 @@ internal sealed record ArrspirePaths(
             && fileExists(podmanSocket);
 
         return new ArrspirePaths(
-            Get(environment, "ARRSPIRE_DATA_PATH")
-                ?? operatorConfig?.Paths.Data
+            configuration["ARRSPIRE_DATA_PATH"]
+                ?? configuration["Paths:Data"]
                 ?? Path.Combine(repositoryRoot, "data"),
-            Get(environment, "ARRSPIRE_MEDIA_PATH")
-                ?? operatorConfig?.Paths.Media
+            configuration["ARRSPIRE_MEDIA_PATH"]
+                ?? configuration["Paths:Media"]
                 ?? Path.Combine(homeDirectory, "media"),
-            Get(environment, "ARRSPIRE_DOWNLOADS_PATH")
-                ?? operatorConfig?.Paths.Downloads
+            configuration["ARRSPIRE_DOWNLOADS_PATH"]
+                ?? configuration["Paths:Downloads"]
                 ?? Path.Combine(homeDirectory, "downloads"),
-            Get(environment, "ARRSPIRE_CONTAINER_SOCKET")
+            configuration["ARRSPIRE_CONTAINER_SOCKET"]
                 ?? (rootlessPodman ? podmanSocket : "/var/run/docker.sock"),
             rootlessPodman);
     }
@@ -106,43 +107,6 @@ internal sealed record ArrspirePaths(
                         + $"{current.Value} / {candidate.Value}");
                 }
             }
-        }
-    }
-
-    private static OperatorConfig? ReadOperatorConfig(string appHostDirectory)
-    {
-        var path = Path.Combine(appHostDirectory, ".arrspire", "config.json");
-        if (!File.Exists(path))
-        {
-            return null;
-        }
-
-        try
-        {
-            var config = JsonSerializer.Deserialize<OperatorConfig>(
-                File.ReadAllText(path),
-                JsonOptions);
-            if (config is null
-                || config.SchemaVersion != 1
-                || string.IsNullOrWhiteSpace(config.Paths?.Data)
-                || string.IsNullOrWhiteSpace(config.Paths.Media)
-                || string.IsNullOrWhiteSpace(config.Paths.Downloads))
-            {
-                throw new InvalidOperationException(
-                    $"Arrspire operator config {path} does not match schema version 1");
-            }
-
-            return config;
-        }
-        catch (InvalidOperationException)
-        {
-            throw;
-        }
-        catch (Exception exception)
-        {
-            throw new InvalidOperationException(
-                $"Unable to read Arrspire operator config {path}: {exception.Message}",
-                exception);
         }
     }
 
@@ -228,16 +192,4 @@ internal sealed record ArrspirePaths(
                 && !Path.IsPathFullyQualified(relative));
     }
 
-    private static string? Get(IReadOnlyDictionary<string, string?> environment, string name)
-        => environment.TryGetValue(name, out var value) && !string.IsNullOrEmpty(value)
-            ? value
-            : null;
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-    };
-
-    private sealed record OperatorConfig(int SchemaVersion, OperatorPaths Paths);
-    private sealed record OperatorPaths(string Data, string Media, string Downloads);
 }

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Logging;
 
 namespace Arrspire.ControlPlane;
 
@@ -20,47 +21,40 @@ internal sealed record ServiceUrls(
 
 internal static class Reconciler
 {
-    public static async Task RunAsync(CancellationToken cancellationToken)
+    public static async Task RunAsync(
+        ControlPlaneOptions options,
+        ServiceEndpointOptions endpoints,
+        IHttpClientFactory clientFactory,
+        ILogger logger,
+        CancellationToken cancellationToken)
     {
         var results = new List<ReconciliationResult>();
         try
         {
             await Status.WriteReconciliationPendingAsync(cancellationToken);
-            var urls = LoadUrls();
-            Log.Info("Waiting for the real service APIs");
-            await Task.WhenAll(new Dictionary<string, string>
-            {
-                ["qBittorrent"] = urls.QBittorrent + "/",
-                ["Sonarr"] = urls.Sonarr + "/ping",
-                ["Radarr"] = urls.Radarr + "/ping",
-                ["Lidarr"] = urls.Lidarr + "/ping",
-                ["Prowlarr"] = urls.Prowlarr + "/ping",
-                ["Bazarr"] = urls.Bazarr + "/",
-                ["Jellyfin"] = urls.Jellyfin + "/health",
-                ["Seerr"] = urls.Seerr + "/api/v1/status",
-                ["Tdarr"] = urls.Tdarr + "/api/v2/status",
-                ["Duplicati"] = urls.Duplicati + "/ngclient/",
-            }.Select(pair => Http.WaitForAsync(pair.Key, pair.Value, cancellationToken)));
-
+            var urls = endpoints.ToServiceUrls();
             var sonarrKey = ApiKeys.ReadArr("sonarr");
             var radarrKey = ApiKeys.ReadArr("radarr");
             var lidarrKey = ApiKeys.ReadArr("lidarr");
             var prowlarrKey = ApiKeys.ReadArr("prowlarr");
             var bazarrKey = await ApiKeys.ReadBazarrAsync(cancellationToken);
             var seerrKey = ApiKeys.ReadSeerr();
-            var qbitPassword = Env.Required("QBITTORRENT_PASSWORD");
+            var qbitPassword = options.QBittorrentPassword;
             await RequiredStageAsync(
                 results,
                 [
                     ("qbittorrent", token => new QBittorrentApi(
+                        clientFactory.CreateClient("cookies"),
                         urls.QBittorrent,
                         qbitPassword).ReconcileAsync(token)),
                     ("jellyfin", token => new JellyfinApi(
+                        clientFactory.CreateClient(),
+                        logger,
                         urls.Jellyfin,
-                        Env.Required("JELLYFIN_ADMIN_USER"),
-                        Env.Required("JELLYFIN_ADMIN_PASSWORD"),
-                        Env.Required("JELLYFIN_SERVER_NAME"),
-                        Env.Required("JELLYFIN_LANGUAGE"))
+                        options.JellyfinAdminUser,
+                        options.JellyfinAdminPassword,
+                        options.JellyfinServerName,
+                        options.JellyfinLanguage)
                         .ReconcileAsync(
                             urls,
                             sonarrKey,
@@ -69,23 +63,28 @@ internal static class Reconciler
                             seerrKey,
                             token)),
                 ],
+                logger,
                 cancellationToken);
 
-            var minimumSeeders = Env.Integer("MINIMUM_SEEDERS", 1);
-            var originalTitle = Env.Boolean("USE_ORIGINAL_TITLE", false);
+            var minimumSeeders = options.MinimumSeeders;
+            var originalTitle = options.UseOriginalTitle;
             await RequiredStageAsync(
                 results,
                 [
                     ("sonarr", token => new ArrApi(
+                        clientFactory.CreateClient(),
                         "sonarr", urls.Sonarr, "v3", sonarrKey, "/tv", "sonarr")
                         .ReconcileAsync(urls.QBittorrent, qbitPassword, minimumSeeders, originalTitle, token)),
                     ("radarr", token => new ArrApi(
+                        clientFactory.CreateClient(),
                         "radarr", urls.Radarr, "v3", radarrKey, "/movies", "radarr")
                         .ReconcileAsync(urls.QBittorrent, qbitPassword, minimumSeeders, originalTitle, token)),
                     ("lidarr", token => new ArrApi(
+                        clientFactory.CreateClient(),
                         "lidarr", urls.Lidarr, "v1", lidarrKey, "/music", "lidarr")
                         .ReconcileAsync(urls.QBittorrent, qbitPassword, minimumSeeders, originalTitle, token)),
                 ],
+                logger,
                 cancellationToken);
 
             var publicIndexerResults = Array.Empty<ReconciliationResult>();
@@ -95,6 +94,7 @@ internal static class Reconciler
                     ("prowlarr", async token =>
                     {
                         var integrations = await new ProwlarrApi(
+                            clientFactory.CreateClient(),
                             urls.Prowlarr,
                             prowlarrKey).ReconcileAsync(
                                 urls.GluetunProxy,
@@ -115,39 +115,49 @@ internal static class Reconciler
                                 result.Reason)).ToArray();
                     }),
                     ("bazarr", token => new BazarrApi(
+                        clientFactory.CreateClient(),
                         urls.Bazarr,
-                        bazarrKey).ReconcileAsync(
+                        bazarrKey,
+                        options).ReconcileAsync(
                             urls.Sonarr,
                             sonarrKey,
                             urls.Radarr,
                             radarrKey,
-                            Env.Required("SUBTITLE_LANGUAGES").Split(',', StringSplitOptions.TrimEntries),
+                            options.SubtitleLanguages.Split(',', StringSplitOptions.TrimEntries),
                             token)),
                     ("seerr", token => new SeerrApi(
+                        clientFactory.CreateClient("cookies"),
                         urls.Seerr,
                         urls.Jellyfin,
-                        Env.Required("JELLYFIN_ADMIN_USER"),
-                        Env.Required("JELLYFIN_ADMIN_PASSWORD"),
-                        seerrKey).ReconcileAsync(
+                        options.JellyfinAdminUser,
+                        options.JellyfinAdminPassword,
+                        seerrKey,
+                        options.TraefikDomain,
+                        options.IngressHttpsPort).ReconcileAsync(
                             urls.Sonarr,
                             sonarrKey,
                             urls.Radarr,
                             radarrKey,
                             token)),
                     ("recyclarr", token => Recyclarr.WriteConfigurationAsync(
-                        urls.Sonarr, sonarrKey, urls.Radarr, radarrKey, token)),
-                    ("tdarr", token => new TdarrApi(urls.Tdarr).ReconcileAsync(token)),
+                        urls.Sonarr, sonarrKey, urls.Radarr, radarrKey, logger, token)),
+                    ("tdarr", token => new TdarrApi(
+                        clientFactory.CreateClient(), urls.Tdarr).ReconcileAsync(token)),
                     ("duplicati", token => new DuplicatiApi(
+                        clientFactory.CreateClient(),
                         urls.Duplicati,
-                        Env.Required("DUPLICATI_WEB_PASSWORD"),
-                        Env.Required("DUPLICATI_ENCRYPTION_KEY")).ReconcileAsync(token)),
+                        options.DuplicatiWebPassword,
+                        options.DuplicatiEncryptionKey).ReconcileAsync(token)),
                 ],
+                logger,
                 cancellationToken);
             results.AddRange(publicIndexerResults);
-            results.AddRange(OptionalResults(completed: true));
-            await AppendNotificationResultAsync(results, cancellationToken);
+            results.AddRange(OptionalResults(options, completed: true));
+            await AppendNotificationResultAsync(
+                results, endpoints, clientFactory, cancellationToken);
             var summary = await Status.WriteReconciliationAsync(results, cancellationToken);
-            Log.Info("Reconciliation summary", summary);
+            logger.LogInformation(
+                "Reconciliation completed with status {Status}", summary.Status);
         }
         catch (Exception exception)
         {
@@ -156,8 +166,9 @@ internal static class Reconciler
                 results.Add(new("control-plane", true, "failed", exception.Message));
             }
 
-            results.AddRange(OptionalResults(completed: false));
-            await AppendNotificationResultAsync(results, cancellationToken);
+            results.AddRange(OptionalResults(options, completed: false));
+            await AppendNotificationResultAsync(
+                results, endpoints, clientFactory, cancellationToken);
             await Status.WriteReconciliationAsync(results, cancellationToken);
             throw;
         }
@@ -166,6 +177,7 @@ internal static class Reconciler
     private static async Task RequiredStageAsync(
         List<ReconciliationResult> results,
         IReadOnlyList<(string Name, Func<CancellationToken, Task> Operation)> operations,
+        ILogger logger,
         CancellationToken cancellationToken)
     {
         var stage = await Task.WhenAll(operations.Select(async operation =>
@@ -173,7 +185,8 @@ internal static class Reconciler
             try
             {
                 await operation.Operation(cancellationToken);
-                Log.Info("Integration reconciled", new { integration = operation.Name });
+                logger.LogInformation(
+                    "Integration {Integration} reconciled", operation.Name);
                 return new ReconciliationResult(operation.Name, true, "ready");
             }
             catch (Exception exception)
@@ -194,8 +207,10 @@ internal static class Reconciler
         }
     }
 
-    private static IReadOnlyList<ReconciliationResult> OptionalResults(bool completed)
-        => Validation.OptionalCredentialStates().Select(provider =>
+    private static IReadOnlyList<ReconciliationResult> OptionalResults(
+        ControlPlaneOptions options,
+        bool completed)
+        => Validation.OptionalCredentialStates(options.ToValidationValues()).Select(provider =>
             provider.Configured
                 ? new ReconciliationResult(
                     $"subtitle-provider:{provider.Name}",
@@ -210,9 +225,11 @@ internal static class Reconciler
 
     private static async Task AppendNotificationResultAsync(
         List<ReconciliationResult> results,
+        ServiceEndpointOptions endpoints,
+        IHttpClientFactory clientFactory,
         CancellationToken cancellationToken)
     {
-        var url = Env.Optional("NOTIFIER_URL");
+        var url = endpoints.Notifier;
         if (url.Length == 0)
         {
             return;
@@ -220,7 +237,7 @@ internal static class Reconciler
 
         try
         {
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            using var client = clientFactory.CreateClient();
             using var response = await client.PostAsJsonAsync(
                 url + "/reconciliation",
                 new { results },
@@ -241,24 +258,14 @@ internal static class Reconciler
         }
     }
 
-    private static ServiceUrls LoadUrls()
-        => new(
-            Env.Required("GLUETUN_PROXY_URL"),
-            Env.Required("SONARR_URL"),
-            Env.Required("RADARR_URL"),
-            Env.Required("LIDARR_URL"),
-            Env.Required("PROWLARR_URL"),
-            Env.Required("BAZARR_URL"),
-            Env.Required("JELLYFIN_URL"),
-            Env.Required("SEERR_URL"),
-            Env.Required("QBITTORRENT_URL"),
-            Env.Required("TDARR_URL"),
-            Env.Required("DUPLICATI_URL"));
 }
 
-internal abstract class JsonApi(string baseUrl, string? apiKey = null)
+internal abstract class JsonApi(
+    HttpClient client,
+    string baseUrl,
+    string? apiKey = null)
 {
-    protected readonly HttpClient Client = new() { Timeout = TimeSpan.FromSeconds(30) };
+    protected HttpClient Client { get; } = client;
     protected string BaseUrl { get; } = baseUrl.TrimEnd('/');
     protected IReadOnlyDictionary<string, string> Headers { get; } =
         apiKey is null

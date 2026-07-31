@@ -1,10 +1,12 @@
-using System.Net;
 using System.Net.Http.Json;
+using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Arrspire.ControlPlane;
 
@@ -21,54 +23,80 @@ internal sealed record NotificationState(
     string Status,
     string Fingerprint);
 
-internal static partial class NotificationRelay
-{
-    private const string StatePath = "/data/status/notification-state.json";
+internal sealed record DiunNotification(string? Image, string? Status);
 
-    public static NtfyConfiguration? Configuration(
-        IReadOnlyDictionary<string, string?>? environment = null)
+internal sealed partial class NtfyOptions
+{
+    public const string SectionName = "Ntfy";
+
+    public string Endpoint { get; init; } = "https://ntfy.sh";
+    public string Topic { get; init; } = string.Empty;
+    public string? Token { get; init; }
+    public string? Click { get; init; }
+
+    public NtfyConfiguration? ToConfiguration()
     {
-        environment ??= Environment.GetEnvironmentVariables()
-            .Cast<System.Collections.DictionaryEntry>()
-            .ToDictionary(
-                entry => (string)entry.Key,
-                entry => entry.Value?.ToString(),
-                StringComparer.Ordinal);
-        var topic = Value(environment, "NTFY_TOPIC");
+        var topic = Topic.Trim();
         if (topic.Length == 0)
         {
+            if (!string.IsNullOrWhiteSpace(Token))
+            {
+                throw new InvalidOperationException(
+                    "Ntfy:Token requires Ntfy:Topic");
+            }
             return null;
         }
 
         if (!TopicRegex().IsMatch(topic))
         {
             throw new InvalidOperationException(
-                "NTFY_TOPIC must be 1-64 letters, numbers, underscores, or hyphens");
+                "Ntfy:Topic must be 1-64 letters, numbers, underscores, or hyphens");
         }
-
-        var endpoint = new Uri(
-            Value(environment, "NTFY_ENDPOINT") is { Length: > 0 } configured
-                ? configured
-                : "https://ntfy.sh");
-        if (endpoint.Scheme is not ("http" or "https"))
+        if (!Uri.TryCreate(Endpoint, UriKind.Absolute, out var endpoint)
+            || endpoint.Scheme is not ("http" or "https"))
         {
-            throw new InvalidOperationException("NTFY_ENDPOINT must be an HTTP or HTTPS URL");
+            throw new InvalidOperationException(
+                "Ntfy:Endpoint must be an absolute HTTP or HTTPS URL");
         }
 
-        return new NtfyConfiguration(
+        return new(
             endpoint,
             topic,
-            EmptyToNull(Value(environment, "NTFY_TOKEN")),
-            EmptyToNull(Value(environment, "ARRSPIRE_HOME_URL")));
+            string.IsNullOrWhiteSpace(Token) ? null : Token.Trim(),
+            string.IsNullOrWhiteSpace(Click) ? null : Click.Trim());
     }
 
-    public static async Task<NotificationDelivery> NotifyReconciliationAsync(
-        IReadOnlyList<ReconciliationResult> results,
-        NtfyConfiguration? configuration = null,
-        string statePath = StatePath,
-        CancellationToken cancellationToken = default)
+    [GeneratedRegex("^[A-Za-z0-9_-]{1,64}$")]
+    private static partial Regex TopicRegex();
+}
+
+internal sealed class NtfyOptionsValidator : IValidateOptions<NtfyOptions>
+{
+    public ValidateOptionsResult Validate(string? name, NtfyOptions options)
     {
-        configuration ??= Configuration();
+        try
+        {
+            _ = options.ToConfiguration();
+            return ValidateOptionsResult.Success;
+        }
+        catch (InvalidOperationException exception)
+        {
+            return ValidateOptionsResult.Fail(exception.Message);
+        }
+    }
+}
+
+internal sealed class NotificationRelay(
+    HttpClient client,
+    IOptions<NtfyOptions> options,
+    ILogger<NotificationRelay> logger)
+{
+    public async Task<NotificationDelivery> NotifyReconciliationAsync(
+        IReadOnlyList<ReconciliationResult> results,
+        string statePath,
+        CancellationToken cancellationToken)
+    {
+        var configuration = options.Value.ToConfiguration();
         if (configuration is null)
         {
             return new(false, false);
@@ -120,147 +148,59 @@ internal static partial class NotificationRelay
         return new(true, recovered || degraded);
     }
 
-    public static async Task RunAsync(CancellationToken cancellationToken)
-    {
-        var port = Env.Integer("PORT", 8080);
-        var listener = new HttpListener();
-        listener.Prefixes.Add($"http://*:{port}/");
-        listener.Start();
-        Log.Info("Notification relay listening", new
-        {
-            port,
-            configured = Configuration() is not null,
-        });
-        using var registration = cancellationToken.Register(listener.Close);
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            HttpListenerContext context;
-            try
-            {
-                context = await listener.GetContextAsync();
-            }
-            catch (HttpListenerException) when (cancellationToken.IsCancellationRequested)
-            {
-                break;
-            }
-
-            _ = HandleAsync(context, cancellationToken);
-        }
-    }
-
-    private static async Task HandleAsync(
-        HttpListenerContext context,
+    public async Task<NotificationDelivery> NotifyDiunAsync(
+        DiunNotification notification,
         CancellationToken cancellationToken)
     {
-        try
+        var configuration = options.Value.ToConfiguration();
+        if (configuration is null)
         {
-            if (context.Request.HttpMethod == "GET"
-                && context.Request.Url?.AbsolutePath == "/healthz")
-            {
-                await SendAsync(context.Response, 200, new { status = "ready" }, cancellationToken);
-                return;
-            }
-
-            if (context.Request.HttpMethod != "POST")
-            {
-                await SendAsync(context.Response, 404, new { error = "Not found" }, cancellationToken);
-                return;
-            }
-
-            using var limited = new MemoryStream();
-            await context.Request.InputStream.CopyToAsync(limited, cancellationToken);
-            if (limited.Length > 256 * 1024)
-            {
-                throw new InvalidOperationException("Request body exceeds 256 KiB");
-            }
-
-            var payload = JsonNode.Parse(limited.ToArray()) as JsonObject
-                ?? throw new InvalidOperationException("Expected a JSON object");
-            object result;
-            if (context.Request.Url?.AbsolutePath == "/reconciliation")
-            {
-                var results = payload["results"]?.Deserialize<ReconciliationResult[]>(
-                    JsonDefaults.Compact)
-                    ?? throw new InvalidOperationException(
-                        "Expected a reconciliation results array");
-                result = await NotifyReconciliationAsync(
-                    results,
-                    cancellationToken: cancellationToken);
-            }
-            else if (context.Request.Url?.AbsolutePath == "/diun")
-            {
-                var configuration = Configuration();
-                if (configuration is null)
-                {
-                    result = new { configured = false, sent = false };
-                }
-                else
-                {
-                    var image = payload["image"]?.GetValue<string>() ?? "A container image";
-                    var status = payload["status"]?.GetValue<string>() ?? "updated";
-                    await PublishAsync(
-                        configuration,
-                        new
-                        {
-                            topic = configuration.Topic,
-                            title = $"{image} has an update",
-                            message = $"{image} was reported as {status} by DIUN.",
-                            priority = 3,
-                            tags = new[] { "package", "whale" },
-                            click = configuration.Click,
-                        },
-                        cancellationToken);
-                    result = new { configured = true, sent = true };
-                }
-            }
-            else
-            {
-                await SendAsync(context.Response, 404, new { error = "Not found" }, cancellationToken);
-                return;
-            }
-
-            await SendAsync(context.Response, 200, result, cancellationToken);
+            return new(false, false);
         }
-        catch (Exception exception)
-        {
-            Log.Error("Notification request failed", new
+
+        var image = string.IsNullOrWhiteSpace(notification.Image)
+            ? "A container image"
+            : notification.Image;
+        var status = string.IsNullOrWhiteSpace(notification.Status)
+            ? "updated"
+            : notification.Status;
+        await PublishAsync(
+            configuration,
+            new
             {
-                path = context.Request.Url?.AbsolutePath,
-                error = exception.Message,
-            });
-            if (context.Response.OutputStream.CanWrite)
-            {
-                await SendAsync(
-                    context.Response,
-                    502,
-                    new { error = "Notification delivery failed" },
-                    cancellationToken);
-            }
-        }
+                topic = configuration.Topic,
+                title = $"{image} has an update",
+                message = $"{image} was reported as {status} by DIUN.",
+                priority = 3,
+                tags = new[] { "package", "whale" },
+                click = configuration.Click,
+            },
+            cancellationToken);
+        return new(true, true);
     }
 
-    private static async Task PublishAsync(
+    private async Task PublishAsync(
         NtfyConfiguration configuration,
         object message,
         CancellationToken cancellationToken)
     {
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+        using var request = new HttpRequestMessage(HttpMethod.Post, configuration.Endpoint)
+        {
+            Content = JsonContent.Create(message, options: JsonDefaults.Compact),
+        };
         if (configuration.Token is not null)
         {
-            client.DefaultRequestHeaders.Authorization =
-                new("Bearer", configuration.Token);
+            request.Headers.Authorization =
+                new AuthenticationHeaderValue("Bearer", configuration.Token);
         }
 
-        using var response = await client.PostAsJsonAsync(
-            configuration.Endpoint,
-            message,
-            JsonDefaults.Compact,
-            cancellationToken);
+        using var response = await client.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             throw new InvalidOperationException(
                 $"ntfy returned HTTP {(int)response.StatusCode}");
         }
+        logger.LogInformation("Notification delivered to ntfy topic {Topic}", configuration.Topic);
     }
 
     private static string Fingerprint(IReadOnlyList<ReconciliationResult> results)
@@ -306,30 +246,4 @@ internal static partial class NotificationRelay
             JsonSerializer.Serialize(state, JsonDefaults.Indented) + "\n",
             cancellationToken: cancellationToken);
 
-    private static async Task SendAsync(
-        HttpListenerResponse response,
-        int status,
-        object value,
-        CancellationToken cancellationToken)
-    {
-        response.StatusCode = status;
-        response.ContentType = "application/json";
-        await JsonSerializer.SerializeAsync(
-            response.OutputStream,
-            value,
-            JsonDefaults.Compact,
-            cancellationToken);
-        await response.OutputStream.WriteAsync("\n"u8.ToArray(), cancellationToken);
-        response.Close();
-    }
-
-    private static string Value(
-        IReadOnlyDictionary<string, string?> environment,
-        string name)
-        => environment.TryGetValue(name, out var value) ? value?.Trim() ?? "" : "";
-
-    private static string? EmptyToNull(string value) => value.Length == 0 ? null : value;
-
-    [GeneratedRegex("^[A-Za-z0-9_-]{1,64}$")]
-    private static partial Regex TopicRegex();
 }

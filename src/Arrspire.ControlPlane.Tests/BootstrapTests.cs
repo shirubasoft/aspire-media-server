@@ -53,14 +53,22 @@ public sealed class BootstrapTests
         Assert.Contains("http://jellyfin:8096", config);
     }
 
+    [Theory]
+    [InlineData("http://jellyfin.dev.internal:8096", "http://jellyfin:8096")]
+    [InlineData("http://gluetun.dev.internal:8080/", "http://gluetun:8080/")]
+    [InlineData("http://jellyfin:8096", "http://jellyfin:8096")]
+    public void PersistentRoutingRemovesAspireDevelopmentDns(
+        string endpoint,
+        string expected)
+        => Assert.Equal(expected, Bootstrap.PersistentRoutingUrl(endpoint));
+
     [Fact]
     public void HomepageListsAllUserFacingGroups()
     {
         var services = new[]
         {
             "jellyfin", "seerr", "sonarr", "radarr", "lidarr", "prowlarr",
-            "qbittorrent", "bazarr", "tdarr", "duplicati", "auth", "grafana",
-            "prometheus", "aspire",
+            "qbittorrent", "bazarr", "tdarr", "duplicati", "auth", "aspire",
         }.ToDictionary(name => name, name => new RoutedService($"http://{name}", "service"));
         var config = Bootstrap.HomepageServices("example.com", 8443, services);
         Assert.Contains("Watch and Request", config);

@@ -20,9 +20,8 @@ internal static partial class Validation
     ];
 
     public static void ValidateConfiguration(
-        IReadOnlyDictionary<string, string?>? environment = null)
+        IReadOnlyDictionary<string, string?> environment)
     {
-        environment ??= CurrentEnvironment();
         var provider = Required(environment, "VPN_PROVIDER");
         if (!VpnProviderRegex().IsMatch(provider) || provider == "custom")
         {
@@ -93,6 +92,12 @@ internal static partial class Validation
             }
         }
 
+        ValidateOptionalCredentialPairs(environment);
+    }
+
+    public static void ValidateOptionalCredentialPairs(
+        IReadOnlyDictionary<string, string?> environment)
+    {
         foreach (var pair in OptionalPairs)
         {
             var hasUser = Value(environment, pair.User).Length > 0;
@@ -107,9 +112,8 @@ internal static partial class Validation
     }
 
     public static IReadOnlyList<OptionalCredentialState> OptionalCredentialStates(
-        IReadOnlyDictionary<string, string?>? environment = null)
+        IReadOnlyDictionary<string, string?> environment)
     {
-        environment ??= CurrentEnvironment();
         return OptionalPairs.Select(pair =>
         {
             var configured = Value(environment, pair.User).Length > 0
@@ -221,14 +225,6 @@ internal static partial class Validation
                 exception);
         }
     }
-
-    private static IReadOnlyDictionary<string, string?> CurrentEnvironment()
-        => Environment.GetEnvironmentVariables()
-            .Cast<System.Collections.DictionaryEntry>()
-            .ToDictionary(
-                entry => (string)entry.Key,
-                entry => entry.Value?.ToString(),
-                StringComparer.Ordinal);
 
     private static string Required(
         IReadOnlyDictionary<string, string?> environment,

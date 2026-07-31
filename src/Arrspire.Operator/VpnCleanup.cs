@@ -13,7 +13,7 @@ internal static partial class VpnCleanup
                 "Pass the exact ARRSPIRE_INSTANCE_ID; broad deletion is unsupported.");
         }
         var configured = Environment.GetEnvironmentVariable(
-            "ARRSPIRE_CONTAINER_ENGINE");
+            "ASPIRE_CONTAINER_RUNTIME");
         var runtime = configured is "docker" or "podman"
             ? configured
             : "docker";

@@ -17,7 +17,7 @@ const testDomain = "192.168.0.15.nip.io";
 type ContainerEngine = "docker" | "podman";
 
 function containerEngine(): ContainerEngine {
-  const configured = process.env.ARRSPIRE_CONTAINER_ENGINE;
+  const configured = process.env.ASPIRE_CONTAINER_RUNTIME;
   if (configured === "docker" || configured === "podman") {
     return configured;
   }
@@ -278,7 +278,7 @@ async function runAcceptance(
       );
     }
     await Promise.all(
-      ["traefik", "homepage", "prometheus", "grafana", "duplicati"].map(
+      ["traefik", "homepage", "duplicati"].map(
         async (resource) =>
           waitForHealthyResource(appHostDirectory, resource),
       ),
@@ -299,7 +299,6 @@ async function runAcceptance(
         jellyfinPassword: environment.Parameters__jellyfin_admin_password!,
         qbittorrentPassword: environment.Parameters__qbittorrent_password!,
         duplicatiPassword: environment.Parameters__duplicati_web_password!,
-        grafanaPassword: environment.Parameters__grafana_admin_password!,
       });
     } catch (error) {
       const diagnosticLogs = await Promise.all(
@@ -451,8 +450,6 @@ void test(
       Parameters__qbittorrent_password: generatedSecret(),
       Parameters__duplicati_encryption_key: generatedSecret(32),
       Parameters__duplicati_web_password: generatedSecret(),
-      Parameters__grafana_admin_password:
-        "ArrspireE2EGrafana123456789",
       Parameters__ingress_admin_password: generatedSecret(),
       Parameters__authelia_session_secret: generatedSecret(64),
       Parameters__authelia_storage_encryption_key: generatedSecret(64),

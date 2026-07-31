@@ -10,7 +10,7 @@ internal static partial class LocalTls
     [
         "auth", "jellyfin", "jellyseerr", "seerr", "sonarr", "radarr",
         "lidarr", "prowlarr", "bazarr", "qbittorrent", "duplicati", "tdarr",
-        "prometheus", "grafana", "traefik",
+        "traefik",
     ];
 
     public static async Task<int> RunAsync(string root, IReadOnlyList<string> args)

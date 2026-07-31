@@ -116,7 +116,9 @@ internal static class MediaResources
                 name: "server",
                 isExternal: directAccess)
             .WithHttpHealthCheck("/api/v2/status", endpointName: "webui");
-        resource.WithComposeRestart();
+        resource
+            .WithComposeHttpHealthCheck(8265, "/api/v2/status")
+            .WithComposeRestart();
 
         return new TdarrHandle(
             resource.AsResource(),
@@ -130,19 +132,12 @@ internal static class MediaResources
         var configDirectory = Path.Combine(context.Paths.Data, "recyclarr");
         var sync = context.Builder
             .AddContainer("recyclarr-sync", ArrspireImages.Recyclarr)
-            .WithEntrypoint("/bin/bash")
-            .WithArgs(
-                "-c",
-                "set -euo pipefail; /app/recyclarr/recyclarr sync; "
-                + "printf '%s\\n' '#!/bin/sh' "
-                + "'printf \"HTTP/1.1 200 OK\\r\\nContent-Length: 5\\r\\n"
-                + "Connection: close\\r\\n\\r\\nready\"' > /tmp/recyclarr-health; "
-                + "chmod +x /tmp/recyclarr-health; "
-                + "exec /usr/bin/nc -lk -p 8787 -e /tmp/recyclarr-health")
+            .WithArgs("sync")
             .WithEnvironment("TZ", context.Parameters.Timezone)
             .WithBindMount(configDirectory, "/config")
-            .WithEndpoint(targetPort: 8787, scheme: "http", name: "health")
-            .WithHttpHealthCheck("/", endpointName: "health");
+            .WithLifetime(ContainerLifetime.Session)
+            .WithComposeRestart("on-failure:5")
+            .WithComposeHealthyDependencies("sonarr", "radarr");
         var scheduled = context.Builder
             .AddContainer("recyclarr", ArrspireImages.Recyclarr)
             .WithEnvironment("TZ", context.Parameters.Timezone)

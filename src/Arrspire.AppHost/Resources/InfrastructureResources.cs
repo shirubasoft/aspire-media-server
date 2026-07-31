@@ -143,45 +143,6 @@ internal static class InfrastructureResources
         return resource.Handle("fail2ban");
     }
 
-    public static HttpResourceHandle AddPrometheus(ArrspireContext context)
-    {
-        var resource = context.Builder
-            .AddContainer("prometheus", ArrspireImages.Prometheus)
-            .WithBindMount(
-                Path.Combine(context.Paths.Data, "prometheus"),
-                "/prometheus")
-            .WithBindMount(
-                Path.Combine(context.Paths.Data, "prometheus-config"),
-                "/etc/prometheus",
-                isReadOnly: true)
-            .ExposeHttp(9090, "/-/healthy")
-            .WithComposeRestart();
-        return resource.HttpHandle("prometheus");
-    }
-
-    public static HttpResourceHandle AddGrafana(
-        ArrspireContext context,
-        HttpResourceHandle prometheus)
-    {
-        var resource = context.Builder
-            .AddContainer("grafana", ArrspireImages.Grafana)
-            .WithEnvironment(
-                "GF_SECURITY_ADMIN_PASSWORD",
-                context.Parameters.GrafanaAdminPassword)
-            .WithEnvironment("GF_USERS_ALLOW_SIGN_UP", "false")
-            .WithBindMount(
-                Path.Combine(context.Paths.Data, "grafana"),
-                "/var/lib/grafana")
-            .WithBindMount(
-                Path.Combine(context.Paths.Data, "grafana-provisioning"),
-                "/etc/grafana/provisioning",
-                isReadOnly: true)
-            .WaitFor(prometheus.Resource)
-            .ExposeHttp(3000, "/api/health")
-            .WithComposeRestart();
-        return resource.HttpHandle("grafana");
-    }
-
     public static HttpResourceHandle AddHomepage(
         ArrspireContext context,
         EndpointReference ingress)

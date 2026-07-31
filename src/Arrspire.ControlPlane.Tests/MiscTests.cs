@@ -29,20 +29,28 @@ public sealed class MiscTests
 
     [Fact]
     public void NtfyIsOptional()
-        => Assert.Null(NotificationRelay.Configuration(new Dictionary<string, string?>()));
+        => Assert.Null(new NtfyOptions().ToConfiguration());
 
     [Fact]
     public void NtfyRejectsUnsafeTopic()
         => Assert.Throws<InvalidOperationException>(() =>
-            NotificationRelay.Configuration(new Dictionary<string, string?>
+            new NtfyOptions
             {
-                ["NTFY_TOPIC"] = "not/a/topic",
-            }));
+                Topic = "not/a/topic",
+            }.ToConfiguration());
+
+    [Fact]
+    public void NtfyRejectsTokenWithoutTopic()
+        => Assert.Throws<InvalidOperationException>(() =>
+            new NtfyOptions
+            {
+                Token = "secret",
+            }.ToConfiguration());
 
     [Fact]
     public void LogRedactsSecretPropertiesAndUrlCredentials()
     {
-        var redacted = Log.Redact(new
+        var redacted = SecretRedactor.Redact(new
         {
             password = "visible",
             url = "https://user:pass@example.com",

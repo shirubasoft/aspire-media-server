@@ -101,7 +101,7 @@ internal static partial class Status
     {
         var redacted = results.Select(result => result with
         {
-            Reason = Log.Redact(result.Reason)?.ToString(),
+            Reason = SecretRedactor.Redact(result.Reason)?.ToString(),
         }).ToArray();
         var summary = new ReconciliationSummary(
             2,

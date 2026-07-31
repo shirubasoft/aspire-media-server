@@ -7,9 +7,12 @@ using System.Text.Json.Nodes;
 
 namespace Arrspire.ControlPlane;
 
-internal sealed class BazarrApi(string baseUrl, string apiKey)
+internal sealed class BazarrApi(
+    HttpClient client,
+    string baseUrl,
+    string apiKey,
+    ControlPlaneOptions options)
 {
-    private readonly HttpClient client = new() { Timeout = TimeSpan.FromSeconds(30) };
     private readonly IReadOnlyDictionary<string, string> headers =
         new Dictionary<string, string> { ["X-API-KEY"] = apiKey };
 
@@ -141,7 +144,7 @@ internal sealed class BazarrApi(string baseUrl, string apiKey)
         }
 
         Add("podnapisi");
-        AddIfConfigured("opensubtitlescom", "OPENSUBTITLESCOM_USER", "OPENSUBTITLESCOM_PASSWORD",
+        AddIfConfigured("opensubtitlescom", options.OpensubtitlesComUser, options.OpensubtitlesComPassword,
             (user, password) => new Dictionary<string, string>
             {
                 ["username"] = user,
@@ -149,7 +152,7 @@ internal sealed class BazarrApi(string baseUrl, string apiKey)
                 ["use_hash"] = "true",
                 ["include_ai_translated"] = "false",
             });
-        AddIfConfigured("opensubtitles", "OPENSUBTITLESORG_USER", "OPENSUBTITLESORG_PASSWORD",
+        AddIfConfigured("opensubtitles", options.OpensubtitlesOrgUser, options.OpensubtitlesOrgPassword,
             (user, password) => new Dictionary<string, string>
             {
                 ["username"] = user,
@@ -157,14 +160,14 @@ internal sealed class BazarrApi(string baseUrl, string apiKey)
                 ["vip"] = "true",
                 ["ssl"] = "false",
             });
-        AddIfConfigured("legendasdivx", "LEGENDASDIVX_USER", "LEGENDASDIVX_PASSWORD",
+        AddIfConfigured("legendasdivx", options.LegendasDivxUser, options.LegendasDivxPassword,
             (user, password) => new Dictionary<string, string>
             {
                 ["username"] = user,
                 ["password"] = password,
                 ["skip_wrong_fps"] = "true",
             });
-        AddIfConfigured("legendasnet", "LEGENDASNET_USER", "LEGENDASNET_PASSWORD",
+        AddIfConfigured("legendasnet", options.LegendasNetUser, options.LegendasNetPassword,
             (user, password) => new Dictionary<string, string>
             {
                 ["username"] = user,
@@ -181,12 +184,10 @@ internal sealed class BazarrApi(string baseUrl, string apiKey)
 
         void AddIfConfigured(
             string provider,
-            string userName,
-            string passwordName,
+            string user,
+            string password,
             Func<string, string, IReadOnlyDictionary<string, string>> settings)
         {
-            var user = Env.Optional(userName);
-            var password = Env.Optional(passwordName);
             if (user.Length > 0 && password.Length > 0)
             {
                 Add(provider, settings(user, password));
@@ -210,21 +211,15 @@ internal sealed class BazarrApi(string baseUrl, string apiKey)
 }
 
 internal sealed class SeerrApi(
+    HttpClient client,
     string baseUrl,
     string jellyfinUrl,
     string username,
     string password,
-    string apiKey)
+    string apiKey,
+    string domain,
+    int ingressPort)
 {
-    private readonly HttpClient client = new(new HttpClientHandler
-    {
-        UseCookies = true,
-        CookieContainer = new CookieContainer(),
-    })
-    {
-        Timeout = TimeSpan.FromSeconds(30),
-    };
-
     public async Task ReconcileAsync(
         string sonarrUrl,
         string sonarrKey,
@@ -350,8 +345,6 @@ internal sealed class SeerrApi(
         var existing = services.OfType<JsonObject>().FirstOrDefault(item =>
             item["name"]?.GetValue<string>() == name)
             ?? (services.Count == 1 ? services[0]?.AsObject() : null);
-        var domain = Env.Required("TRAEFIK_DOMAIN");
-        var ingressPort = Env.Integer("INGRESS_HTTPS_PORT", 443);
         var payload = new JsonObject
         {
             ["name"] = name,
@@ -425,10 +418,11 @@ internal sealed class SeerrApi(
 }
 
 internal sealed class DuplicatiApi(
+    HttpClient client,
     string baseUrl,
     string webPassword,
     string encryptionKey)
-    : JsonApi(baseUrl)
+    : JsonApi(client, baseUrl)
 {
     public async Task ReconcileAsync(CancellationToken token)
     {
@@ -494,7 +488,7 @@ internal sealed class DuplicatiApi(
     }
 }
 
-internal sealed class TdarrApi(string baseUrl) : JsonApi(baseUrl)
+internal sealed class TdarrApi(HttpClient client, string baseUrl) : JsonApi(client, baseUrl)
 {
     public async Task ReconcileAsync(CancellationToken token)
     {

@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -6,34 +5,6 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
 namespace Arrspire.ControlPlane;
-
-internal static class Env
-{
-    public static string Required(string name)
-        => Optional(name) is { Length: > 0 } value
-            ? value
-            : throw new InvalidOperationException(
-                $"Required environment variable {name} is missing");
-
-    public static string Optional(string name, string fallback = "")
-        => Environment.GetEnvironmentVariable(name)?.Trim() ?? fallback;
-
-    public static int Integer(string name, int fallback)
-        => Optional(name) is not { Length: > 0 } raw
-            ? fallback
-            : int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
-                ? value
-                : throw new InvalidOperationException($"{name} must be an integer");
-
-    public static bool Boolean(string name, bool fallback)
-        => Optional(name).ToLowerInvariant() switch
-        {
-            "" => fallback,
-            "1" or "true" or "yes" or "on" => true,
-            "0" or "false" or "no" or "off" => false,
-            _ => throw new InvalidOperationException($"{name} must be a boolean"),
-        };
-}
 
 internal static class Retry
 {
@@ -63,12 +34,6 @@ internal static class Retry
                     || !cancellationToken.IsCancellationRequested))
             {
                 var delay = nextDelay < maximumDelay ? nextDelay : maximumDelay;
-                Log.Warning("Operation failed; retrying", new
-                {
-                    attempt,
-                    delayMs = delay.TotalMilliseconds,
-                    error = exception.Message,
-                });
                 await (wait ?? Task.Delay)(delay, cancellationToken);
                 nextDelay = TimeSpan.FromMilliseconds(
                     Math.Min(delay.TotalMilliseconds * 2, maximumDelay.TotalMilliseconds));
@@ -94,7 +59,7 @@ internal static class Retry
             cancellationToken);
 }
 
-internal static partial class Log
+internal static partial class SecretRedactor
 {
     private static readonly Regex SensitiveName = SensitiveNameRegex();
     private static readonly Regex InlineSecret = InlineSecretRegex();
@@ -114,34 +79,6 @@ internal static partial class Log
 
         var node = JsonSerializer.SerializeToNode(value);
         return RedactNode(node, propertyName);
-    }
-
-    public static void Info(string message, object? fields = null)
-        => Write("info", message, fields);
-
-    public static void Warning(string message, object? fields = null)
-        => Write("warn", message, fields);
-
-    public static void Error(string message, object? fields = null)
-        => Write("error", message, fields);
-
-    private static void Write(string level, string message, object? fields)
-    {
-        var payload = new JsonObject
-        {
-            ["timestamp"] = DateTimeOffset.UtcNow.ToString("O"),
-            ["level"] = level,
-            ["message"] = message,
-        };
-        if (Redact(fields) is JsonObject redacted)
-        {
-            foreach (var field in redacted)
-            {
-                payload[field.Key] = field.Value?.DeepClone();
-            }
-        }
-
-        Console.WriteLine(payload.ToJsonString(JsonDefaults.Compact));
     }
 
     private static JsonNode? RedactNode(JsonNode? node, string propertyName)

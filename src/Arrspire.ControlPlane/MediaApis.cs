@@ -6,17 +6,11 @@ using System.Text.Json.Nodes;
 
 namespace Arrspire.ControlPlane;
 
-internal sealed class QBittorrentApi(string baseUrl, string password)
+internal sealed class QBittorrentApi(
+    HttpClient client,
+    string baseUrl,
+    string password)
 {
-    private readonly HttpClient client = new(new HttpClientHandler
-    {
-        UseCookies = true,
-        CookieContainer = new CookieContainer(),
-    })
-    {
-        Timeout = TimeSpan.FromSeconds(30),
-    };
-
     public async Task ReconcileAsync(CancellationToken token)
     {
         using (var response = await Http.SendAsync(
@@ -146,13 +140,14 @@ internal sealed class QBittorrentApi(string baseUrl, string password)
 }
 
 internal sealed class ArrApi(
+    HttpClient client,
     string name,
     string baseUrl,
     string version,
     string apiKey,
     string rootFolder,
     string category)
-    : JsonApi($"{baseUrl.TrimEnd('/')}/api/{version}", apiKey)
+    : JsonApi(client, $"{baseUrl.TrimEnd('/')}/api/{version}", apiKey)
 {
     public async Task ReconcileAsync(
         string qbittorrentUrl,
@@ -350,8 +345,8 @@ internal sealed record ProwlarrApplication(
 
 internal sealed record OptionalIntegration(string Name, string Status, string? Reason = null);
 
-internal sealed class ProwlarrApi(string baseUrl, string apiKey)
-    : JsonApi(baseUrl.TrimEnd('/') + "/api/v1", apiKey)
+internal sealed class ProwlarrApi(HttpClient client, string baseUrl, string apiKey)
+    : JsonApi(client, baseUrl.TrimEnd('/') + "/api/v1", apiKey)
 {
     public async Task<IReadOnlyList<OptionalIntegration>> ReconcileAsync(
         string proxyUrl,

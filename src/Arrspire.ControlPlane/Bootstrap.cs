@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
 
 namespace Arrspire.ControlPlane;
 
@@ -19,9 +20,8 @@ internal static partial class Bootstrap
     private static readonly string[] DataDirectories =
     [
         "authelia/config", "authelia/secrets", "backups", "bazarr", "diun",
-        "duplicati", "fail2ban/filter.d", "fail2ban/jail.d", "gluetun", "grafana",
-        "grafana-provisioning/datasources", "homepage/secrets", "jellyfin",
-        "jellyfin-cache", "jellyseerr", "lidarr", "prometheus", "prometheus-config",
+        "duplicati", "fail2ban/filter.d", "fail2ban/jail.d", "gluetun",
+        "homepage/secrets", "jellyfin", "jellyfin-cache", "jellyseerr", "lidarr",
         "prowlarr", "qbittorrent/qBittorrent", "radarr", "recyclarr", "sonarr",
         "status", "tdarr/configs", "tdarr/logs", "tdarr/server",
         "tdarr/transcode-cache", "traefik/acme", "traefik/dynamic", "traefik/logs",
@@ -35,10 +35,14 @@ internal static partial class Bootstrap
         ("prowlarr", 9696),
     ];
 
-    public static async Task RunAsync(CancellationToken cancellationToken)
+    public static async Task RunAsync(
+        ControlPlaneOptions options,
+        ServiceEndpointOptions endpoints,
+        IHttpClientFactory clientFactory,
+        ILogger logger,
+        CancellationToken cancellationToken)
     {
-        Log.Info("Starting deterministic bootstrap");
-        Validation.ValidateConfiguration();
+        logger.LogInformation("Starting deterministic bootstrap");
         foreach (var path in DataDirectories)
         {
             Directory.CreateDirectory(Path.Combine("/data", path));
@@ -50,8 +54,9 @@ internal static partial class Bootstrap
             UnixOwnership.Chown(directory.Path, directory.Uid, directory.Gid, directory.Recursive);
         }
 
-        await PluginInstaller.InstallAsync(cancellationToken);
-        var qbitPassword = Env.Required("QBITTORRENT_PASSWORD");
+        await PluginInstaller.InstallAsync(
+            clientFactory.CreateClient("plugins"), logger, cancellationToken);
+        var qbitPassword = options.QBittorrentPassword;
         await AtomicFiles.WriteOnceAsync(
             "/data/qbittorrent/qBittorrent/qBittorrent.conf",
             QBittorrentConfiguration(qbitPassword),
@@ -64,18 +69,19 @@ internal static partial class Bootstrap
                 cancellationToken: cancellationToken);
         }
 
-        var domain = Env.Optional("TRAEFIK_DOMAIN", "192.168.0.15.nip.io");
-        var httpsPort = Env.Integer("TRAEFIK_HTTPS_PORT", 443);
-        var services = RoutedServices(domain);
+        var domain = options.TraefikDomain;
+        var httpsPort = options.TraefikHttpsPort;
+        var services = RoutedServices(domain, endpoints);
         var keys = ArrServices.ToDictionary(
             service => service.Name,
             service => ApiKeys.ReadArr(service.Name),
             StringComparer.Ordinal);
         await Recyclarr.WriteConfigurationAsync(
-            Env.Required("SONARR_URL"),
+            endpoints.Sonarr,
             keys["sonarr"],
-            Env.Required("RADARR_URL"),
+            endpoints.Radarr,
             keys["radarr"],
+            logger,
             cancellationToken);
 
         var publicMode = UnixFileMode.UserRead | UnixFileMode.UserWrite
@@ -91,20 +97,20 @@ internal static partial class Bootstrap
             AtomicFiles.WriteIfChangedAsync(
                 "/data/authelia/config/users_database.yml",
                 AutheliaUsersDatabase(
-                    Env.Required("INGRESS_ADMIN_USER"),
-                    Env.Required("INGRESS_ADMIN_PASSWORD"),
-                    Env.Required("AUTHELIA_SESSION_SECRET"),
+                    options.IngressAdminUser,
+                    options.IngressAdminPassword,
+                    options.AutheliaSessionSecret,
                     domain),
                 secretMode,
                 cancellationToken),
             AtomicFiles.WriteIfChangedAsync(
                 "/data/authelia/secrets/session-secret",
-                Env.Required("AUTHELIA_SESSION_SECRET"),
+                options.AutheliaSessionSecret,
                 secretMode,
                 cancellationToken),
             AtomicFiles.WriteIfChangedAsync(
                 "/data/authelia/secrets/storage-encryption-key",
-                Env.Required("AUTHELIA_STORAGE_ENCRYPTION_KEY"),
+                options.AutheliaStorageEncryptionKey,
                 secretMode,
                 cancellationToken),
             AtomicFiles.WriteIfChangedAsync(
@@ -112,8 +118,8 @@ internal static partial class Bootstrap
                 TraefikDynamicConfiguration(
                     domain,
                     services,
-                    Env.Required("AUTH_URL"),
-                    Env.Optional("TRAEFIK_TLS_MODE", "local")),
+                    PersistentRoutingUrl(endpoints.Auth),
+                    options.TraefikTlsMode),
                 publicMode,
                 cancellationToken),
             AtomicFiles.WriteIfChangedAsync(
@@ -124,16 +130,6 @@ internal static partial class Bootstrap
             AtomicFiles.WriteIfChangedAsync(
                 "/data/fail2ban/jail.d/traefik.conf",
                 Fail2banJail,
-                publicMode,
-                cancellationToken),
-            AtomicFiles.WriteIfChangedAsync(
-                "/data/prometheus-config/prometheus.yml",
-                PrometheusConfiguration,
-                publicMode,
-                cancellationToken),
-            AtomicFiles.WriteIfChangedAsync(
-                "/data/grafana-provisioning/datasources/prometheus.yml",
-                GrafanaDatasource(services["prometheus"].Url),
                 publicMode,
                 cancellationToken),
             AtomicFiles.WriteIfChangedAsync(
@@ -183,15 +179,13 @@ internal static partial class Bootstrap
 
         await Task.WhenAll(writes);
         await Status.WriteBootstrapAsync(cancellationToken);
-        Log.Info("Bootstrap completed");
+        logger.LogInformation("Bootstrap completed");
     }
 
     internal static IReadOnlyList<(string Path, uint Uid, uint Gid, bool Recursive)>
         RuntimeDirectories()
         =>
         [
-            ("/data/grafana", 472, 0, false),
-            ("/data/prometheus", 65_534, 65_534, false),
             ("/data/recyclarr", 1000, 1000, false),
             ("/data/jellyseerr", 1000, 1000, true),
             ("/media/movies", 1000, 1000, false),
@@ -510,48 +504,51 @@ internal static partial class Bootstrap
             + Card("Duplicati", Route("duplicati"), "duplicati.png", "Configuration backups", services["duplicati"].Url, "/ngclient/")
             + "\n- Operations:\n"
             + Card("Authelia", Route("auth"), "authelia.png", "Identity and access management", services["auth"].Url, "/api/health")
-            + Card("Grafana", Route("grafana"), "grafana.png", "Metrics dashboards", services["grafana"].Url, "/api/health")
-            + Card("Prometheus", Route("prometheus"), "prometheus.png", "Metrics collection", services["prometheus"].Url, "/-/healthy")
             + Card("Aspire", Route("aspire"), "microsoft-azure.png", "Resources, logs, traces, and commands", services["aspire"].Url, "/")
             + Card("Traefik", Route("traefik"), "traefik-proxy.png", "Ingress routes and TLS", "http://traefik:8080", "/ping");
     }
 
-    private static IReadOnlyDictionary<string, RoutedService> RoutedServices(string domain)
+    private static IReadOnlyDictionary<string, RoutedService> RoutedServices(
+        string domain,
+        ServiceEndpointOptions endpoints)
         => new Dictionary<string, RoutedService>(StringComparer.Ordinal)
         {
-            ["auth"] = new(Env.Required("AUTH_URL"), "identity"),
-            ["aspire"] = new(Env.Optional("ASPIRE_DASHBOARD_URL", "http://arrspire-dashboard:18888"), "ingress"),
-            ["bazarr"] = new(Env.Required("BAZARR_URL"), "ingress"),
-            ["duplicati"] = new(Env.Required("DUPLICATI_URL"), "service"),
-            ["grafana"] = new(Env.Required("GRAFANA_URL"), "ingress+service"),
-            ["homepage"] = new(Env.Required("HOMEPAGE_URL"), "ingress", Hosts: [domain, $"home.{domain}"]),
-            ["jellyfin"] = new(Env.Required("JELLYFIN_URL"), "service"),
-            ["seerr"] = new(Env.Required("SEERR_URL"), "service", Aliases: ["jellyseerr"]),
-            ["lidarr"] = new(Env.Required("LIDARR_URL"), "ingress"),
-            ["prometheus"] = new(Env.Required("PROMETHEUS_URL"), "ingress"),
-            ["prowlarr"] = new(Env.Required("PROWLARR_URL"), "ingress"),
-            ["qbittorrent"] = new(Env.Required("QBITTORRENT_URL"), "ingress+service"),
-            ["radarr"] = new(Env.Required("RADARR_URL"), "ingress"),
-            ["sonarr"] = new(Env.Required("SONARR_URL"), "ingress"),
-            ["tdarr"] = new(Env.Required("TDARR_URL"), "ingress"),
+            ["auth"] = new(PersistentRoutingUrl(endpoints.Auth), "identity"),
+            ["aspire"] = new(PersistentRoutingUrl(endpoints.AspireDashboard), "ingress"),
+            ["bazarr"] = new(PersistentRoutingUrl(endpoints.Bazarr), "ingress"),
+            ["duplicati"] = new(PersistentRoutingUrl(endpoints.Duplicati), "service"),
+            ["homepage"] = new(PersistentRoutingUrl(endpoints.Homepage), "ingress", Hosts: [domain, $"home.{domain}"]),
+            ["jellyfin"] = new(PersistentRoutingUrl(endpoints.Jellyfin), "service"),
+            ["seerr"] = new(PersistentRoutingUrl(endpoints.Seerr), "service", Aliases: ["jellyseerr"]),
+            ["lidarr"] = new(PersistentRoutingUrl(endpoints.Lidarr), "ingress"),
+            ["prowlarr"] = new(PersistentRoutingUrl(endpoints.Prowlarr), "ingress"),
+            ["qbittorrent"] = new(PersistentRoutingUrl(endpoints.QBittorrent), "ingress+service"),
+            ["radarr"] = new(PersistentRoutingUrl(endpoints.Radarr), "ingress"),
+            ["sonarr"] = new(PersistentRoutingUrl(endpoints.Sonarr), "ingress"),
+            ["tdarr"] = new(PersistentRoutingUrl(endpoints.Tdarr), "ingress"),
         };
+
+    internal static string PersistentRoutingUrl(string value)
+    {
+        const string developmentSuffix = ".dev.internal";
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            || !uri.Host.EndsWith(developmentSuffix, StringComparison.OrdinalIgnoreCase))
+        {
+            return value;
+        }
+
+        var builder = new UriBuilder(uri)
+        {
+            Host = uri.Host[..^developmentSuffix.Length],
+        };
+        var normalized = builder.Uri.ToString();
+        return value.EndsWith("/", StringComparison.Ordinal)
+            ? normalized
+            : normalized.TrimEnd('/');
+    }
 
     private static bool RequiresIngressAuthentication(string mode)
         => mode is "ingress" or "ingress+service";
-
-    private static string GrafanaDatasource(string prometheusUrl)
-        => $"""
-            apiVersion: 1
-            datasources:
-              - name: Prometheus
-                uid: prometheus
-                type: prometheus
-                access: proxy
-                url: {prometheusUrl}
-                isDefault: true
-                editable: false
-
-            """;
 
     private static string PublicUrl(string service, string domain, int port)
         => $"https://{service}.{domain}{(port == 443 ? "" : $":{port}")}";
@@ -583,17 +580,6 @@ internal static partial class Bootstrap
 
         """;
 
-    private const string PrometheusConfiguration = """
-        global:
-          scrape_interval: 15s
-          evaluation_interval: 15s
-
-        scrape_configs:
-          - job_name: prometheus
-            static_configs:
-              - targets: ["localhost:9090"]
-
-        """;
 }
 
 internal static partial class ApiKeys
@@ -685,6 +671,7 @@ internal static class Recyclarr
         string sonarrKey,
         string radarrUrl,
         string radarrKey,
+        ILogger logger,
         CancellationToken cancellationToken)
     {
         var path = "/data/recyclarr/recyclarr.yml";
@@ -693,7 +680,8 @@ internal static class Recyclarr
             Configuration(sonarrUrl, sonarrKey, radarrUrl, radarrKey),
             cancellationToken: cancellationToken);
         UnixOwnership.Chown(path, 1000, 1000, recursive: false);
-        Log.Info("Recyclarr configuration reconciled", new { changed });
+        logger.LogInformation(
+            "Recyclarr configuration reconciled; changed={Changed}", changed);
     }
 }
 
@@ -807,7 +795,10 @@ internal static class PluginInstaller
             "1833bf8bc8bf8b51ad178c30fd2e9147"),
     ];
 
-    public static async Task InstallAsync(CancellationToken cancellationToken)
+    public static async Task InstallAsync(
+        HttpClient client,
+        ILogger logger,
+        CancellationToken cancellationToken)
     {
         const string root = "/data/jellyfin/plugins";
         Directory.CreateDirectory(root);
@@ -815,15 +806,14 @@ internal static class PluginInstaller
         {
             try
             {
-                await InstallAsync(root, plugin, cancellationToken);
+                await InstallAsync(client, logger, root, plugin, cancellationToken);
             }
             catch (Exception exception)
             {
-                Log.Warning("Jellyfin plugin installation deferred", new
-                {
-                    plugin = plugin.Name,
-                    error = exception.Message,
-                });
+                logger.LogWarning(
+                    exception,
+                    "Jellyfin plugin {Plugin} installation deferred",
+                    plugin.Name);
             }
         }
     }
@@ -841,6 +831,8 @@ internal static class PluginInstaller
     }
 
     private static async Task InstallAsync(
+        HttpClient client,
+        ILogger logger,
         string root,
         Plugin plugin,
         CancellationToken cancellationToken)
@@ -858,7 +850,6 @@ internal static class PluginInstaller
         try
         {
             var archive = Path.Combine(temporary, "plugin.zip");
-            using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(2) };
             await using (var output = File.Create(archive))
             await using (var input = await client.GetStreamAsync(plugin.Url, cancellationToken))
             {
@@ -888,11 +879,10 @@ internal static class PluginInstaller
 
             Directory.Move(extracted, target);
             RemoveObsolete(root, plugin);
-            Log.Info("Jellyfin plugin installed", new
-            {
-                plugin = plugin.Name,
-                version = plugin.Version,
-            });
+            logger.LogInformation(
+                "Jellyfin plugin {Plugin} version {Version} installed",
+                plugin.Name,
+                plugin.Version);
         }
         finally
         {

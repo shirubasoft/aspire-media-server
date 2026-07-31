@@ -34,7 +34,7 @@ cd src
 dotnet run --project Arrspire.Operator -- setup
 dotnet run --project Arrspire.Operator -- doctor
 dotnet build Arrspire.slnx
-aspire run
+aspire start
 ```
 
 For unattended setup, supply protected `Parameters__*` environment variables:
@@ -91,8 +91,6 @@ AppHost:
   capabilities, service-network mode, and dashboard settings.
 - endpoint expressions flow live service URLs into the C# control plane and
   notification callbacks.
-- lifecycle callbacks validate the selected Docker or Podman runtime before
-  startup.
 - `IInteractionService` and custom resource commands provide dashboard-native
   operator feedback.
 - generated persisted parameters keep secrets stable without a parallel
@@ -101,7 +99,7 @@ AppHost:
 Bootstrap runs once before dependent services. Reconciliation waits for actual
 service APIs and then configures qBittorrent, Jellyfin, Sonarr, Radarr, Lidarr,
 Prowlarr, Bazarr, Seerr, Tdarr, Duplicati, Recyclarr, Homepage, Traefik,
-Authelia, Prometheus, Grafana, and notifications. Readiness is written under
+Authelia, and notifications. Readiness is written under
 the configured data path in `status/bootstrap.json` and
 `status/reconciliation.json`.
 

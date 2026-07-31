@@ -221,16 +221,12 @@ internal static class Setup
             ["AUTHELIA_SESSION_SECRET"] = new string('s', 64),
             ["AUTHELIA_STORAGE_ENCRYPTION_KEY"] = new string('e', 64),
         });
-        if (values.NtfyTopic.Length == 0 && values.NtfyToken.Length > 0)
+        _ = new NtfyOptions
         {
-            throw new InvalidOperationException("ntfy token requires an ntfy topic");
-        }
-        _ = NotificationRelay.Configuration(new Dictionary<string, string?>
-        {
-            ["NTFY_ENDPOINT"] = values.NtfyEndpoint,
-            ["NTFY_TOPIC"] = values.NtfyTopic,
-            ["NTFY_TOKEN"] = values.NtfyToken,
-        });
+            Endpoint = values.NtfyEndpoint,
+            Topic = values.NtfyTopic,
+            Token = values.NtfyToken,
+        }.ToConfiguration();
     }
 
     internal static string DefaultTimezone(string? localId = null)

@@ -16,5 +16,6 @@
 
   <ItemGroup>
     <ProjectReference Include="../Arrspire.ContainerRunner/Arrspire.ContainerRunner.csproj" />
+    <ProjectReference Include="../Arrspire.Notifier/Arrspire.Notifier.csproj" />
   </ItemGroup>
 </Project>

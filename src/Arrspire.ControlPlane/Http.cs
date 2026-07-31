@@ -74,51 +74,6 @@ internal static class Http
             ?? throw new JsonException($"Empty JSON response from {url}");
     }
 
-    public static async Task WaitForAsync(
-        string name,
-        string url,
-        CancellationToken cancellationToken)
-    {
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-        Exception? lastError = null;
-        for (var attempt = 1; attempt <= 90; attempt++)
-        {
-            try
-            {
-                using var response = await SendAsync(
-                    client,
-                    HttpMethod.Get,
-                    url,
-                    expected:
-                    [
-                        HttpStatusCode.OK,
-                        HttpStatusCode.NoContent,
-                        HttpStatusCode.Unauthorized,
-                        HttpStatusCode.Forbidden,
-                    ],
-                    cancellationToken: cancellationToken);
-                Log.Info("Service is ready", new { service = name, attempt });
-                return;
-            }
-            catch (Exception exception) when (
-                exception is not OperationCanceledException
-                || !cancellationToken.IsCancellationRequested)
-            {
-                lastError = exception;
-                if (attempt == 1 || attempt % 10 == 0)
-                {
-                    Log.Info("Waiting for service", new { service = name, attempt });
-                }
-
-                await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
-            }
-        }
-
-        throw new InvalidOperationException(
-            $"{name} did not become ready at {url}: {lastError?.Message}",
-            lastError);
-    }
-
     public static FormUrlEncodedContent Form(IEnumerable<KeyValuePair<string, string>> values)
         => new(values);
 }

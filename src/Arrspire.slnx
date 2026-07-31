@@ -6,10 +6,13 @@
   </Folder>
   <Folder Name="/ControlPlane/">
     <Project Path="Arrspire.ControlPlane/Arrspire.ControlPlane.csproj" />
+    <Project Path="Arrspire.Notifier/Arrspire.Notifier.csproj" />
+    <Project Path="Arrspire.ServiceDefaults/Arrspire.ServiceDefaults.csproj" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="Arrspire.AppHost.Tests/Arrspire.AppHost.Tests.csproj" />
     <Project Path="Arrspire.ControlPlane.Tests/Arrspire.ControlPlane.Tests.csproj" />
+    <Project Path="Arrspire.Notifier.Tests/Arrspire.Notifier.Tests.csproj" />
     <Project Path="Arrspire.Operator.Tests/Arrspire.Operator.Tests.csproj" />
   </Folder>
 </Solution>

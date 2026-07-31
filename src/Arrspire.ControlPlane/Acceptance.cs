@@ -1,30 +1,35 @@
 using System.Net;
-using System.Net.Security;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Logging;
 
 namespace Arrspire.ControlPlane;
 
 internal static class Acceptance
 {
-    public static async Task VerifyAsync(CancellationToken cancellationToken)
+    public static async Task VerifyAsync(
+        ControlPlaneOptions options,
+        ServiceEndpointOptions endpoints,
+        IHttpClientFactory clientFactory,
+        ILogger logger,
+        CancellationToken cancellationToken)
     {
-        Log.Info("Starting real-stack acceptance checks");
+        logger.LogInformation("Starting real-stack acceptance checks");
         var checks = new List<Task>
         {
             VerifyBootstrapFilesAsync(cancellationToken),
-            VerifyIngressAsync(cancellationToken),
-            VerifyQBittorrentAsync(cancellationToken),
-            VerifyArrAsync("sonarr", "v3", ApiKeys.ReadArr("sonarr"), "/tv", cancellationToken),
-            VerifyArrAsync("radarr", "v3", ApiKeys.ReadArr("radarr"), "/movies", cancellationToken),
-            VerifyArrAsync("lidarr", "v1", ApiKeys.ReadArr("lidarr"), "/music", cancellationToken),
-            VerifyProwlarrAsync(ApiKeys.ReadArr("prowlarr"), cancellationToken),
-            VerifyBazarrAsync(await ApiKeys.ReadBazarrAsync(cancellationToken), cancellationToken),
-            VerifyJellyfinAsync(cancellationToken),
-            VerifySeerrAsync(ApiKeys.ReadSeerr(), cancellationToken),
+            VerifyIngressAsync(clientFactory, endpoints.Ingress, options.TraefikDomain, cancellationToken),
+            VerifyQBittorrentAsync(clientFactory, endpoints.QBittorrent, options.QBittorrentPassword, cancellationToken),
+            VerifyArrAsync(clientFactory, "sonarr", endpoints.Sonarr, "v3", ApiKeys.ReadArr("sonarr"), "/tv", cancellationToken),
+            VerifyArrAsync(clientFactory, "radarr", endpoints.Radarr, "v3", ApiKeys.ReadArr("radarr"), "/movies", cancellationToken),
+            VerifyArrAsync(clientFactory, "lidarr", endpoints.Lidarr, "v1", ApiKeys.ReadArr("lidarr"), "/music", cancellationToken),
+            VerifyProwlarrAsync(clientFactory, endpoints.Prowlarr, ApiKeys.ReadArr("prowlarr"), cancellationToken),
+            VerifyBazarrAsync(clientFactory, endpoints.Bazarr, await ApiKeys.ReadBazarrAsync(cancellationToken), cancellationToken),
+            VerifyJellyfinAsync(clientFactory, endpoints.Jellyfin, cancellationToken),
+            VerifySeerrAsync(clientFactory, endpoints.Seerr, ApiKeys.ReadSeerr(), cancellationToken),
         };
         await Task.WhenAll(checks);
-        Log.Info("All real-stack acceptance checks passed");
+        logger.LogInformation("All real-stack acceptance checks passed");
     }
 
     private static Task VerifyBootstrapFilesAsync(CancellationToken cancellationToken)
@@ -44,31 +49,28 @@ internal static class Acceptance
         return Task.CompletedTask;
     }
 
-    private static async Task VerifyIngressAsync(CancellationToken cancellationToken)
+    private static async Task VerifyIngressAsync(
+        IHttpClientFactory clientFactory,
+        string ingressUrl,
+        string domain,
+        CancellationToken cancellationToken)
     {
-        using var handler = new HttpClientHandler
-        {
-            ServerCertificateCustomValidationCallback = (_, _, _, _) => true,
-            AllowAutoRedirect = false,
-        };
-        using var client = new HttpClient(handler);
-        using var request = new HttpRequestMessage(HttpMethod.Get, Env.Required("INGRESS_URL"));
-        request.Headers.Host = $"sonarr.{Env.Required("TRAEFIK_DOMAIN")}";
+        using var client = clientFactory.CreateClient("insecure-ingress");
+        using var request = new HttpRequestMessage(HttpMethod.Get, ingressUrl);
+        request.Headers.Host = $"sonarr.{domain}";
         using var response = await client.SendAsync(request, cancellationToken);
         Ensure(
             response.StatusCode == HttpStatusCode.Unauthorized,
             $"Ingress accepted an unauthenticated request ({(int)response.StatusCode})");
     }
 
-    private static async Task VerifyQBittorrentAsync(CancellationToken cancellationToken)
+    private static async Task VerifyQBittorrentAsync(
+        IHttpClientFactory clientFactory,
+        string baseUrl,
+        string password,
+        CancellationToken cancellationToken)
     {
-        var baseUrl = Env.Required("QBITTORRENT_URL");
-        using var handler = new HttpClientHandler
-        {
-            UseCookies = true,
-            CookieContainer = new CookieContainer(),
-        };
-        using var client = new HttpClient(handler);
+        using var client = clientFactory.CreateClient("cookies");
         using var login = await Http.SendAsync(
             client,
             HttpMethod.Post,
@@ -76,7 +78,7 @@ internal static class Acceptance
             Http.Form(new Dictionary<string, string>
             {
                 ["username"] = "admin",
-                ["password"] = Env.Required("QBITTORRENT_PASSWORD"),
+                ["password"] = password,
             }),
             cancellationToken: cancellationToken);
         var headers = new Dictionary<string, string>
@@ -111,15 +113,16 @@ internal static class Acceptance
     }
 
     private static async Task VerifyArrAsync(
+        IHttpClientFactory clientFactory,
         string name,
+        string baseUrl,
         string version,
         string key,
         string rootFolder,
         CancellationToken cancellationToken)
     {
-        var baseUrl = Env.Required(name.ToUpperInvariant() + "_URL");
         var headers = new Dictionary<string, string> { ["X-Api-Key"] = key };
-        using var client = new HttpClient();
+        using var client = clientFactory.CreateClient();
         var clients = (await Http.JsonAsync(
             client, HttpMethod.Get, $"{baseUrl}/api/{version}/downloadclient",
             headers: headers, cancellationToken: cancellationToken)).AsArray();
@@ -133,12 +136,13 @@ internal static class Acceptance
     }
 
     private static async Task VerifyProwlarrAsync(
+        IHttpClientFactory clientFactory,
+        string baseUrl,
         string key,
         CancellationToken cancellationToken)
     {
-        var baseUrl = Env.Required("PROWLARR_URL");
         var headers = new Dictionary<string, string> { ["X-Api-Key"] = key };
-        using var client = new HttpClient();
+        using var client = clientFactory.CreateClient();
         var host = await Http.JsonAsync(
             client, HttpMethod.Get, baseUrl + "/api/v1/config/host",
             headers: headers, cancellationToken: cancellationToken);
@@ -154,14 +158,16 @@ internal static class Acceptance
     }
 
     private static async Task VerifyBazarrAsync(
+        IHttpClientFactory clientFactory,
+        string baseUrl,
         string key,
         CancellationToken cancellationToken)
     {
-        using var client = new HttpClient();
+        using var client = clientFactory.CreateClient();
         var settings = await Http.JsonAsync(
             client,
             HttpMethod.Get,
-            Env.Required("BAZARR_URL") + "/api/system/settings",
+            baseUrl + "/api/system/settings",
             headers: new Dictionary<string, string> { ["X-API-KEY"] = key },
             cancellationToken: cancellationToken);
         Ensure(settings["general"]?["use_sonarr"]?.GetValue<bool>() is true,
@@ -170,10 +176,12 @@ internal static class Acceptance
             "Bazarr Radarr is disabled");
     }
 
-    private static async Task VerifyJellyfinAsync(CancellationToken cancellationToken)
+    private static async Task VerifyJellyfinAsync(
+        IHttpClientFactory clientFactory,
+        string baseUrl,
+        CancellationToken cancellationToken)
     {
-        var baseUrl = Env.Required("JELLYFIN_URL");
-        using var client = new HttpClient();
+        using var client = clientFactory.CreateClient();
         var info = await Http.JsonAsync(
             client, HttpMethod.Get, baseUrl + "/System/Info/Public",
             cancellationToken: cancellationToken);
@@ -182,11 +190,12 @@ internal static class Acceptance
     }
 
     private static async Task VerifySeerrAsync(
+        IHttpClientFactory clientFactory,
+        string baseUrl,
         string key,
         CancellationToken cancellationToken)
     {
-        var baseUrl = Env.Required("SEERR_URL");
-        using var client = new HttpClient();
+        using var client = clientFactory.CreateClient();
         var settings = await Http.JsonAsync(
             client, HttpMethod.Get, baseUrl + "/api/v1/settings/public",
             cancellationToken: cancellationToken);

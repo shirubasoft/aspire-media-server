@@ -1,5 +1,6 @@
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Docker.Resources.ComposeNodes;
+using Aspire.Hosting.Docker.Resources.ServiceNodes;
 
 namespace Arrspire.AppHost;
 
@@ -36,7 +37,8 @@ internal static class ArrspireResourceExtensions
                 scheme: "http",
                 name: endpointName,
                 isExternal: directAccess)
-            .WithHttpHealthCheck(healthPath, endpointName: endpointName);
+            .WithHttpHealthCheck(healthPath, endpointName: endpointName)
+            .WithComposeHttpHealthCheck(port, healthPath);
         return resource;
     }
 
@@ -51,6 +53,41 @@ internal static class ArrspireResourceExtensions
         string policy = "unless-stopped")
         where T : IComputeResource
         => resource.PublishAsDockerComposeService((_, service) => service.Restart = policy);
+
+    public static IResourceBuilder<T> WithComposeHttpHealthCheck<T>(
+        this IResourceBuilder<T> resource,
+        int port,
+        string path)
+        where T : IComputeResource
+        => resource.PublishAsDockerComposeService((_, service) =>
+            service.Healthcheck = new Healthcheck
+            {
+                Test =
+                [
+                    "CMD-SHELL",
+                    $"if command -v curl >/dev/null; then curl -fsS http://127.0.0.1:{port}{path} >/dev/null; "
+                    + $"else wget -q -O /dev/null http://127.0.0.1:{port}{path}; fi",
+                ],
+                Interval = "5s",
+                Timeout = "3s",
+                Retries = 24,
+                StartPeriod = "5s",
+            });
+
+    public static IResourceBuilder<T> WithComposeHealthyDependencies<T>(
+        this IResourceBuilder<T> resource,
+        params string[] dependencies)
+        where T : IComputeResource
+        => resource.PublishAsDockerComposeService((_, service) =>
+        {
+            foreach (var dependency in dependencies)
+            {
+                service.DependsOn[dependency] = new ServiceDependency
+                {
+                    Condition = "service_healthy",
+                };
+            }
+        });
 
     public static IResourceBuilder<T> WithComposeInit<T>(this IResourceBuilder<T> resource)
         where T : IComputeResource

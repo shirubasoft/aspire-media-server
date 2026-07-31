@@ -19,7 +19,5 @@ internal static class ArrspireImages
     public const string Traefik = "docker.io/library/traefik:v3.7@sha256:652929a140a32d7cafafb13c6cdfab5376cfeff800f51397b87b524501ed02a8";
     public const string Fail2ban = "docker.io/crazymax/fail2ban:latest@sha256:7cd8a427a44675397398a8dace2a3d755e62c72527f8730e4fd37697731a9321";
     public const string Diun = "docker.io/crazymax/diun:latest@sha256:e324b793eb32dfb7f74d3a39421ebf090141caaadee69b8f78da63112408ee25";
-    public const string Prometheus = "docker.io/prom/prometheus:latest@sha256:3c42b892cf723fa54d2f262c37a0e1f80aa8c8ddb1da7b9b0df9455a35a7f893";
-    public const string Grafana = "docker.io/grafana/grafana:latest@sha256:1c1bd67c54c5fcf6e759897852b5a584191bd6796e8d328a5ace457799801261";
     public const string AspireDashboardDigest = "sha256:187fe35d9ebe913d2f0cb40e629a4a2802e591b84f3fd5fdbfb7341fe1746351";
 }

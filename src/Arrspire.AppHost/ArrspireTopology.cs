@@ -20,8 +20,6 @@ internal sealed record ArrspireTopology(
     TraefikHandle Traefik,
     ResourceHandle Fail2ban,
     ResourceHandle Diun,
-    HttpResourceHandle Prometheus,
-    HttpResourceHandle Grafana,
     HttpResourceHandle Homepage,
     HttpResourceHandle Notifier,
     ResourceHandle Bootstrap,
@@ -47,8 +45,6 @@ internal static class ArrspireTopologyBuilder
         var authelia = InfrastructureResources.AddAuthelia(context);
         var traefik = InfrastructureResources.AddTraefik(context, authelia);
         var fail2ban = InfrastructureResources.AddFail2ban(context, traefik);
-        var prometheus = InfrastructureResources.AddPrometheus(context);
-        var grafana = InfrastructureResources.AddGrafana(context, prometheus);
         var homepage = InfrastructureResources.AddHomepage(context, traefik.PublicHttps);
         var notifier = ControlPlaneResources.AddNotifier(
             context,
@@ -72,9 +68,7 @@ internal static class ArrspireTopologyBuilder
             tdarr.WebUi,
             duplicati.Http,
             homepage.Http,
-            authelia.Http,
-            prometheus.Http,
-            grafana.Http);
+            authelia.Http);
         var bootstrap = ControlPlaneResources.AddBootstrap(context, endpoints);
 
         var bootstrappedResources = new IResourceBuilder<IResourceWithWaitSupport>[]
@@ -95,8 +89,6 @@ internal static class ArrspireTopologyBuilder
             traefik.Resource,
             fail2ban.Resource,
             diun.Resource,
-            prometheus.Resource,
-            grafana.Resource,
             homepage.Resource,
             notifier.Resource,
         };
@@ -125,7 +117,7 @@ internal static class ArrspireTopologyBuilder
             context,
             endpoints,
             reconciledResources);
-        reconciler.Resource.WaitFor(recyclarr.Sync);
+        reconciler.Resource.WaitForCompletion(recyclarr.Sync);
         recyclarr.Container.WaitForCompletion(reconciler.Resource);
 
         ResourceHandle? acceptance = null;
@@ -158,8 +150,6 @@ internal static class ArrspireTopologyBuilder
             traefik,
             fail2ban,
             diun,
-            prometheus,
-            grafana,
             homepage,
             notifier,
             bootstrap,

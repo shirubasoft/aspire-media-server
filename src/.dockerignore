@@ -1,6 +1,9 @@
-.aspire
-dist
-node_modules
-aspire-output
-data
+**/bin/
+**/obj/
+.aspire/
+.git/
+dist/
+aspire-output/
+node_modules/
+data/
 *.log

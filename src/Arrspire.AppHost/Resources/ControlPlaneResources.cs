@@ -18,9 +18,7 @@ internal sealed record ControlPlaneEndpoints(
     EndpointReference Tdarr,
     EndpointReference Duplicati,
     EndpointReference Homepage,
-    EndpointReference Auth,
-    EndpointReference Prometheus,
-    EndpointReference Grafana);
+    EndpointReference Auth);
 
 internal static class ControlPlaneResources
 {
@@ -31,11 +29,15 @@ internal static class ControlPlaneResources
     {
         var configuredHttpsPort = Ingress.ResolvePorts(context.Paths.RootlessPodman).Https;
         var domain = context.Parameters.TraefikDomain;
-        var resource = AddControlPlane(context, "notifier", "serve-notifications", false)
-            .WithEnvironment("PORT", "8080")
-            .WithEnvironment("NTFY_ENDPOINT", context.Parameters.NtfyEndpoint)
-            .WithEnvironment("NTFY_TOPIC", context.Parameters.NtfyTopic)
-            .WithEnvironment("NTFY_TOKEN", context.Parameters.NtfyToken)
+        var statePath = context.IsRunMode
+            ? Path.Combine(context.Paths.Data, "status", "notification-state.json")
+            : "/data/status/notification-state.json";
+        var resource = context.Builder
+            .AddProject<Projects.Arrspire_Notifier>("notifier")
+            .WithEnvironment("Notification__StatePath", statePath)
+            .WithEnvironment("Ntfy__Endpoint", context.Parameters.NtfyEndpoint)
+            .WithEnvironment("Ntfy__Topic", context.Parameters.NtfyTopic)
+            .WithEnvironment("Ntfy__Token", context.Parameters.NtfyToken)
             .WithEnvironment(async environment =>
             {
                 var domainValue = await domain.Resource.GetValueAsync(
@@ -47,14 +49,23 @@ internal static class ControlPlaneResources
                         ?? throw new InvalidOperationException(
                             "Traefik public HTTPS endpoint port was not allocated")
                     : configuredHttpsPort.ToString();
-                environment.EnvironmentVariables["ARRSPIRE_HOME_URL"] =
+                environment.EnvironmentVariables["Ntfy__Click"] =
                     $"https://{domainValue}"
                     + (httpsPort == "443" ? string.Empty : $":{httpsPort}");
             })
             .WaitFor(homepage.Resource)
-            .WithEndpoint(targetPort: 8080, scheme: "http", name: "http")
+            .WithHttpEndpoint(
+                targetPort: 8080,
+                name: "http",
+                env: "ASPNETCORE_HTTP_PORTS")
             .WithHttpHealthCheck("/healthz")
-            .WithComposeRestart();
+            .PublishAsDockerFile(container => container
+                .WithDockerfile(
+                    context.SourceRoot,
+                    Path.Combine("Arrspire.Notifier", "Dockerfile"))
+                .WithBindMount(context.Paths.Data, "/data")
+                .WithComposeHttpHealthCheck(8080, "/healthz")
+                .WithComposeRestart());
         return resource.HttpHandle("notifier");
     }
 
@@ -93,46 +104,46 @@ internal static class ControlPlaneResources
             context,
             AddControlPlane(context, "bootstrap", "bootstrap")
                 .WithEnvironment(
-                    "QBITTORRENT_PASSWORD",
+                    "Arrspire__QBittorrentPassword",
                     context.Parameters.QBittorrentPassword)
-                .WithEnvironment("TRAEFIK_DOMAIN", context.Parameters.TraefikDomain)
-                .WithEnvironment("TRAEFIK_TLS_MODE", context.Parameters.TraefikTlsMode)
-                .WithEnvironment("TRAEFIK_ACME_EMAIL", context.Parameters.TraefikAcmeEmail)
+                .WithEnvironment("Arrspire__TraefikDomain", context.Parameters.TraefikDomain)
+                .WithEnvironment("Arrspire__TraefikTlsMode", context.Parameters.TraefikTlsMode)
+                .WithEnvironment("Arrspire__TraefikAcmeEmail", context.Parameters.TraefikAcmeEmail)
                 .WithEnvironment(
-                    "CF_DNS_API_TOKEN",
+                    "Arrspire__CloudflareDnsApiToken",
                     context.Parameters.CloudflareDnsApiToken)
-                .WithEnvironment("INGRESS_ADMIN_USER", context.Parameters.IngressAdminUser)
+                .WithEnvironment("Arrspire__IngressAdminUser", context.Parameters.IngressAdminUser)
                 .WithEnvironment(
-                    "INGRESS_ADMIN_PASSWORD",
+                    "Arrspire__IngressAdminPassword",
                     context.Parameters.IngressAdminPassword)
                 .WithEnvironment(
-                    "AUTHELIA_SESSION_SECRET",
+                    "Arrspire__AutheliaSessionSecret",
                     context.Parameters.AutheliaSessionSecret)
                 .WithEnvironment(
-                    "AUTHELIA_STORAGE_ENCRYPTION_KEY",
+                    "Arrspire__AutheliaStorageEncryptionKey",
                     context.Parameters.AutheliaStorageEncryptionKey)
-                .WithEnvironment("VPN_PROVIDER", context.Parameters.VpnProvider)
+                .WithEnvironment("Arrspire__VpnProvider", context.Parameters.VpnProvider)
                 .WithEnvironment(
-                    "VPN_WIREGUARD_KEY",
+                    "Arrspire__VpnWireguardKey",
                     context.Parameters.VpnWireguardKey)
-                .WithEnvironment("VPN_COUNTRIES", context.Parameters.VpnCountries)
-                .WithEnvironment("TIMEZONE", context.Parameters.Timezone)
+                .WithEnvironment("Arrspire__VpnCountries", context.Parameters.VpnCountries)
+                .WithEnvironment("Arrspire__Timezone", context.Parameters.Timezone)
                 .WithEnvironment(
-                    "JELLYFIN_LANGUAGE",
+                    "Arrspire__JellyfinLanguage",
                     context.Parameters.JellyfinLanguage)
                 .WithEnvironment(
-                    "SUBTITLE_LANGUAGES",
+                    "Arrspire__SubtitleLanguages",
                     context.Parameters.SubtitleLanguages)
                 .WithEnvironment(
-                    "USE_ORIGINAL_TITLE",
+                    "Arrspire__UseOriginalTitle",
                     context.Parameters.UseOriginalTitle)
-                .WithEnvironment("MINIMUM_SEEDERS", context.Parameters.MinimumSeeders)
+                .WithEnvironment("Arrspire__MinimumSeeders", context.Parameters.MinimumSeeders)
                 .WithOptionalProviderEnvironment(context),
             endpoints)
             .WithPublicIngressPort(
                 context,
                 endpoints,
-                "TRAEFIK_HTTPS_PORT")
+                "Arrspire__TraefikHttpsPort")
             .WithHiddenOnCompletion();
         return resource.Handle("bootstrap");
     }
@@ -146,33 +157,33 @@ internal static class ControlPlaneResources
             context,
             AddControlPlane(context, "reconciler", "reconcile")
                 .WithEnvironment(
-                    "JELLYFIN_ADMIN_USER",
+                    "Arrspire__JellyfinAdminUser",
                     context.Parameters.JellyfinAdminUser)
                 .WithEnvironment(
-                    "JELLYFIN_ADMIN_PASSWORD",
+                    "Arrspire__JellyfinAdminPassword",
                     context.Parameters.JellyfinAdminPassword)
                 .WithEnvironment(
-                    "JELLYFIN_SERVER_NAME",
+                    "Arrspire__JellyfinServerName",
                     context.Parameters.JellyfinServerName)
                 .WithEnvironment(
-                    "JELLYFIN_LANGUAGE",
+                    "Arrspire__JellyfinLanguage",
                     context.Parameters.JellyfinLanguage)
                 .WithEnvironment(
-                    "QBITTORRENT_PASSWORD",
+                    "Arrspire__QBittorrentPassword",
                     context.Parameters.QBittorrentPassword)
                 .WithEnvironment(
-                    "DUPLICATI_WEB_PASSWORD",
+                    "Arrspire__DuplicatiWebPassword",
                     context.Parameters.DuplicatiWebPassword)
                 .WithEnvironment(
-                    "DUPLICATI_ENCRYPTION_KEY",
+                    "Arrspire__DuplicatiEncryptionKey",
                     context.Parameters.DuplicatiEncryptionKey)
                 .WithEnvironment(
-                    "SUBTITLE_LANGUAGES",
+                    "Arrspire__SubtitleLanguages",
                     context.Parameters.SubtitleLanguages)
                 .WithEnvironment(
-                    "USE_ORIGINAL_TITLE",
+                    "Arrspire__UseOriginalTitle",
                     context.Parameters.UseOriginalTitle)
-                .WithEnvironment("MINIMUM_SEEDERS", context.Parameters.MinimumSeeders)
+                .WithEnvironment("Arrspire__MinimumSeeders", context.Parameters.MinimumSeeders)
                 .WithOptionalProviderEnvironment(context),
             endpoints);
         foreach (var dependency in dependencies)
@@ -182,7 +193,11 @@ internal static class ControlPlaneResources
 
         resource
             .WithLifetime(ContainerLifetime.Session)
-            .WithHealthCheck(ReconciliationHealth.CheckName)
+            .WithComposeHealthyDependencies(
+                dependencies
+                    .Select(dependency => dependency.Resource.Name)
+                    .Where(name => name != "gluetun")
+                    .ToArray())
             .WithComposeRestart("on-failure:5");
         return resource.Handle("reconciler");
     }
@@ -197,13 +212,13 @@ internal static class ControlPlaneResources
             context,
             AddControlPlane(context, "acceptance", "verify")
                 .WithEnvironment(
-                    "JELLYFIN_ADMIN_USER",
+                    "Arrspire__JellyfinAdminUser",
                     context.Parameters.JellyfinAdminUser)
                 .WithEnvironment(
-                    "JELLYFIN_ADMIN_PASSWORD",
+                    "Arrspire__JellyfinAdminPassword",
                     context.Parameters.JellyfinAdminPassword)
                 .WithEnvironment(
-                    "QBITTORRENT_PASSWORD",
+                    "Arrspire__QBittorrentPassword",
                     context.Parameters.QBittorrentPassword),
             endpoints)
             .WaitForCompletion(reconciler.Resource)
@@ -228,6 +243,7 @@ internal static class ControlPlaneResources
                 context.SourceRoot,
                 Path.Combine("control-plane", "Dockerfile"))
             .WithArgs(command)
+            .WithOtlpExporter()
             .WithBindMount(context.Paths.Data, "/data");
         if (includeApplicationPaths)
         {
@@ -246,34 +262,34 @@ internal static class ControlPlaneResources
     {
         foreach (var (name, endpoint) in new Dictionary<string, EndpointReference>
         {
-            ["GLUETUN_PROXY_URL"] = endpoints.GluetunProxy,
-            ["INGRESS_URL"] = endpoints.Ingress,
-            ["NOTIFIER_URL"] = endpoints.Notifier,
-            ["SONARR_URL"] = endpoints.Sonarr,
-            ["RADARR_URL"] = endpoints.Radarr,
-            ["LIDARR_URL"] = endpoints.Lidarr,
-            ["PROWLARR_URL"] = endpoints.Prowlarr,
-            ["BAZARR_URL"] = endpoints.Bazarr,
-            ["JELLYFIN_URL"] = endpoints.Jellyfin,
-            ["SEERR_URL"] = endpoints.Seerr,
-            ["QBITTORRENT_URL"] = endpoints.QBittorrent,
-            ["TDARR_URL"] = endpoints.Tdarr,
-            ["DUPLICATI_URL"] = endpoints.Duplicati,
-            ["HOMEPAGE_URL"] = endpoints.Homepage,
-            ["AUTH_URL"] = endpoints.Auth,
-            ["PROMETHEUS_URL"] = endpoints.Prometheus,
-            ["GRAFANA_URL"] = endpoints.Grafana,
+            ["Services__GluetunProxy"] = endpoints.GluetunProxy,
+            ["Services__Ingress"] = endpoints.Ingress,
+            ["Services__Notifier"] = endpoints.Notifier,
+            ["Services__Sonarr"] = endpoints.Sonarr,
+            ["Services__Radarr"] = endpoints.Radarr,
+            ["Services__Lidarr"] = endpoints.Lidarr,
+            ["Services__Prowlarr"] = endpoints.Prowlarr,
+            ["Services__Bazarr"] = endpoints.Bazarr,
+            ["Services__Jellyfin"] = endpoints.Jellyfin,
+            ["Services__Seerr"] = endpoints.Seerr,
+            ["Services__QBittorrent"] = endpoints.QBittorrent,
+            ["Services__Tdarr"] = endpoints.Tdarr,
+            ["Services__Duplicati"] = endpoints.Duplicati,
+            ["Services__Homepage"] = endpoints.Homepage,
+            ["Services__Auth"] = endpoints.Auth,
         })
         {
-            resource.WithEnvironment(name, endpoint);
+            resource
+                .WithReference(endpoint)
+                .WithEnvironment(name, endpoint);
         }
 
         resource
-            .WithEnvironment("TRAEFIK_DOMAIN", context.Parameters.TraefikDomain)
+            .WithEnvironment("Arrspire__TraefikDomain", context.Parameters.TraefikDomain)
             .WithPublicIngressPort(
                 context,
                 endpoints,
-                "INGRESS_HTTPS_PORT");
+                "Arrspire__IngressHttpsPort");
         return resource;
     }
 
@@ -299,23 +315,23 @@ internal static class ControlPlaneResources
         ArrspireContext context)
         => resource
             .WithEnvironment(
-                "OPENSUBTITLESCOM_USER",
+                "Arrspire__OpensubtitlesComUser",
                 context.Parameters.OpensubtitlesComUser)
             .WithEnvironment(
-                "OPENSUBTITLESCOM_PASSWORD",
+                "Arrspire__OpensubtitlesComPassword",
                 context.Parameters.OpensubtitlesComPassword)
             .WithEnvironment(
-                "OPENSUBTITLESORG_USER",
+                "Arrspire__OpensubtitlesOrgUser",
                 context.Parameters.OpensubtitlesOrgUser)
             .WithEnvironment(
-                "OPENSUBTITLESORG_PASSWORD",
+                "Arrspire__OpensubtitlesOrgPassword",
                 context.Parameters.OpensubtitlesOrgPassword)
-            .WithEnvironment("LEGENDASDIVX_USER", context.Parameters.LegendasDivxUser)
+            .WithEnvironment("Arrspire__LegendasDivxUser", context.Parameters.LegendasDivxUser)
             .WithEnvironment(
-                "LEGENDASDIVX_PASSWORD",
+                "Arrspire__LegendasDivxPassword",
                 context.Parameters.LegendasDivxPassword)
-            .WithEnvironment("LEGENDASNET_USER", context.Parameters.LegendasNetUser)
+            .WithEnvironment("Arrspire__LegendasNetUser", context.Parameters.LegendasNetUser)
             .WithEnvironment(
-                "LEGENDASNET_PASSWORD",
+                "Arrspire__LegendasNetPassword",
                 context.Parameters.LegendasNetPassword);
 }

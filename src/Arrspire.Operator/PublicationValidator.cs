@@ -77,7 +77,7 @@ internal static partial class PublicationValidator
         RequireSettings(
             ServiceSection(compose, "reconciler"),
             "reconciler",
-            ["NOTIFIER_URL: \"http://notifier:8080\""]);
+            ["Services__Notifier: \"http://notifier:8080\""]);
         RequireSettings(
             ServiceSection(compose, "qbittorrent"),
             "qbittorrent",
@@ -102,11 +102,11 @@ internal static partial class PublicationValidator
             notifier,
             "notifier",
             [
-                "NTFY_TOKEN: \"${NTFY_TOKEN}\"",
-                "ARRSPIRE_HOME_URL: \"https://",
+                "Ntfy__Token: \"${NTFY_TOKEN}\"",
+                "Ntfy__Click: \"https://",
             ]);
         if (notifier.Contains(
-            "ARRSPIRE_HOME_URL: \"http://homepage",
+            "Ntfy__Click: \"http://homepage",
             StringComparison.Ordinal))
         {
             throw new InvalidOperationException(

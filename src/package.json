@@ -11,7 +11,7 @@
     "test:unit": "dotnet test Arrspire.slnx --configuration Release",
     "test:e2e": "tsx --test --test-concurrency=1 control-plane/test/stack.e2e.ts",
     "build": "dotnet build Arrspire.slnx --configuration Release",
-    "dev": "aspire run",
+    "dev": "aspire start",
     "publish": "dotnet run --project Arrspire.Operator -- publish",
     "deploy": "dotnet run --project Arrspire.Operator -- deploy",
     "deploy:down": "dotnet run --project Arrspire.Operator -- down",

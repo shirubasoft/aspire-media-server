@@ -26,32 +26,26 @@ internal static class Doctor
     public static async Task<int> RunAsync(string root)
     {
         var checks = new List<DoctorCheck>();
-        await CheckCommandAsync(checks, root, "Aspire CLI", "aspire", ["--version"]);
-        var runtime = await DetectRuntimeAsync(root);
-        checks.Add(runtime is null
-            ? new(
-                "Container runtime",
-                DoctorCheckStatus.Fail,
-                "Docker/Podman with Compose is unavailable",
-                "Start Docker or Podman and install its Compose integration.")
-            : new(
-                "Container runtime",
-                DoctorCheckStatus.Pass,
-                $"{runtime} and Compose are available"));
+        await CheckCommandAsync(
+            checks,
+            root,
+            "Aspire environment",
+            "aspire",
+            ["doctor", "--format", "Json", "--non-interactive", "--nologo"]);
 
         var parameters = await AspireParametersAsync(root);
         try
         {
             Validation.ValidateConfiguration(BuildValidationEnvironment(parameters));
-            _ = NotificationRelay.Configuration(new Dictionary<string, string?>
+            _ = new NtfyOptions
             {
-                ["NTFY_ENDPOINT"] = Parameter(
+                Endpoint = Parameter(
                     parameters,
                     "ntfy-endpoint",
                     "https://ntfy.sh"),
-                ["NTFY_TOPIC"] = Parameter(parameters, "ntfy-topic", ""),
-                ["NTFY_TOKEN"] = Parameter(parameters, "ntfy-token", ""),
-            });
+                Topic = Parameter(parameters, "ntfy-topic", ""),
+                Token = Parameter(parameters, "ntfy-token", ""),
+            }.ToConfiguration();
             checks.Add(new(
                 "Aspire parameters",
                 DoctorCheckStatus.Pass,
@@ -471,37 +465,6 @@ internal static class Doctor
         {
             checks.Add(new(name, DoctorCheckStatus.Fail, exception.Message));
         }
-    }
-
-    private static async Task<string?> DetectRuntimeAsync(string root)
-    {
-        var configured = Environment.GetEnvironmentVariable(
-            "ARRSPIRE_CONTAINER_ENGINE");
-        var candidates = configured is "docker" or "podman"
-            ? [configured]
-            : new[] { "docker", "podman" };
-        foreach (var runtime in candidates)
-        {
-            try
-            {
-                if ((await ProcessRunner.CaptureAsync(
-                        runtime,
-                        ["info"],
-                        root)).ExitCode == 0
-                    && (await ProcessRunner.CaptureAsync(
-                        runtime,
-                        ["compose", "version"],
-                        root)).ExitCode == 0)
-                {
-                    return runtime;
-                }
-            }
-            catch
-            {
-                // Try the next configured candidate.
-            }
-        }
-        return null;
     }
 
     private static async Task<Dictionary<string, string>> AspireParametersAsync(

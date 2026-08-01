@@ -114,4 +114,8 @@ public sealed class BootstrapTests
             ["Bazarr_1.0", "Bazarr_2.0", "Other_1.0"]);
         Assert.Equal(["Bazarr_1.0"], obsolete);
     }
+
+    [Fact]
+    public void PluginBootstrapIncludesSubtitleExtract()
+        => Assert.Contains("Subtitle Extract", PluginInstaller.InstalledPluginNames());
 }

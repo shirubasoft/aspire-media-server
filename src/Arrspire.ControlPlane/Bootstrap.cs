@@ -790,10 +790,16 @@ internal static class PluginInstaller
         new("TheTVDB", "TheTVDB", "22.0.0.0",
             new("https://github.com/jellyfin/jellyfin-plugin-tvdb/releases/download/v22/thetvdb_22.0.0.0.zip"),
             "dff31b428c9416d67ac78f515852d2cb"),
+        new("Subtitle Extract", "Subtitle Extract", "7.0.0.0",
+            new("https://repo.jellyfin.org/files/plugin/subtitle-extract/subtitle-extract_7.0.0.0.zip"),
+            "363e440d8107e7d22b575630a9e96487"),
         new("Bazarr", "Bazarr", "1.1.2.0",
             new("https://github.com/enoch85/bazarr-jellyfin/releases/download/v1.1.2/Jellyfin.Plugin.Bazarr.zip"),
             "1833bf8bc8bf8b51ad178c30fd2e9147"),
     ];
+
+    internal static IReadOnlyList<string> InstalledPluginNames()
+        => Plugins.Select(plugin => plugin.Name).ToArray();
 
     public static async Task InstallAsync(
         HttpClient client,

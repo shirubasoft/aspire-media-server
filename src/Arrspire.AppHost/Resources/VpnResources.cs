@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Aspire.Hosting.ApplicationModel;
+using Aspire.Hosting.Docker.Resources.ServiceNodes;
 
 namespace Arrspire.AppHost.Resources;
 
@@ -59,6 +60,14 @@ internal static partial class VpnResources
                 service.CapAdd.Add("NET_ADMIN");
                 service.Devices.Add("/dev/net/tun:/dev/net/tun");
                 service.Restart = "unless-stopped";
+                service.Healthcheck = new Healthcheck
+                {
+                    Test = ["CMD", "/gluetun-entrypoint", "healthcheck"],
+                    Interval = "5s",
+                    Timeout = "5s",
+                    Retries = 1,
+                    StartPeriod = "10s",
+                };
             });
 
         if (identity is not null)

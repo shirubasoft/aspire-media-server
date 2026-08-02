@@ -87,6 +87,8 @@ internal static partial class Firewall
     [GeneratedRegex(@"^(?:\d{1,3}\.){3}\d{1,3}/(?:[0-9]|[12][0-9]|3[0-2])$")]
     private static partial Regex CidrRegex();
 
-    [GeneratedRegex(@"(?:0\.0\.0\.0|127\.0\.0\.1|\[::\]):(\d+):443")]
+    [GeneratedRegex(
+        @"^[ \t]*-[ \t]*[\""']?(?:(?:0\.0\.0\.0|127\.0\.0\.1|\[::\]):)?(\d+):443[\""']?[ \t]*$",
+        RegexOptions.Multiline)]
     private static partial Regex HttpsPortRegex();
 }

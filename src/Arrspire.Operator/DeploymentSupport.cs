@@ -201,12 +201,15 @@ internal static partial class DeploymentSupport
             : 180_000;
         var deadline = DateTimeOffset.UtcNow.AddMilliseconds(timeout);
         Exception? lastError = null;
+        string? lastObservation = null;
         while (DateTimeOffset.UtcNow < deadline)
         {
             try
             {
                 var root = await IngressStatusAsync(domain, port, address);
                 var auth = await IngressStatusAsync($"auth.{domain}", port, address);
+                lastObservation = $"homepage HTTP {(int)root.StatusCode}"
+                    + $" -> {root.Location}; auth HTTP {(int)auth.StatusCode}";
                 if (IsExpectedHomepageRedirect(
                         root.StatusCode,
                         root.Location,
@@ -226,7 +229,8 @@ internal static partial class DeploymentSupport
             await Task.Delay(TimeSpan.FromSeconds(2));
         }
         throw new InvalidOperationException(
-            $"Homepage verification timed out: {lastError?.Message}");
+            $"Homepage verification timed out: "
+            + (lastError?.Message ?? lastObservation ?? "no response"));
     }
 
     internal static bool IsExpectedHomepageRedirect(
@@ -308,6 +312,8 @@ internal static partial class DeploymentSupport
         {
             Timeout = TimeSpan.FromSeconds(5),
         };
+        client.DefaultRequestHeaders.Accept.Add(
+            new MediaTypeWithQualityHeaderValue("text/html"));
         using var response = await client.GetAsync(
             $"https://{hostname}{(port == 443 ? "" : $":{port}")}/");
         return (response.StatusCode, response.Headers.Location);

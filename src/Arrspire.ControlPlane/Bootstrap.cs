@@ -648,6 +648,9 @@ internal static class Recyclarr
                   - trash_id: 72dae194fc92bf828f32cde7744e51a1 # WEB-1080p
                     reset_unmatched_scores:
                       enabled: true
+                  - trash_id: d1498e7d189fbe6c7110ceaabb7473e6 # WEB-2160p
+                    reset_unmatched_scores:
+                      enabled: true
                   - trash_id: 20e0fc959f1f1704bed501f23bdae76f # [Anime] Remux-1080p
                     reset_unmatched_scores:
                       enabled: true
@@ -661,6 +664,9 @@ internal static class Recyclarr
                   type: movie
                 quality_profiles:
                   - trash_id: d1d67249d3890e49bc12e275d989a7e9 # HD Bluray + WEB
+                    reset_unmatched_scores:
+                      enabled: true
+                  - trash_id: 64fb5f9858489bdac2af690e27c8f42f # UHD Bluray + WEB
                     reset_unmatched_scores:
                       enabled: true
 

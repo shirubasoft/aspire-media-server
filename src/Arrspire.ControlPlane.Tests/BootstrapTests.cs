@@ -102,7 +102,9 @@ public sealed class BootstrapTests
     {
         var config = Recyclarr.Configuration("http://sonarr", "one", "http://radarr", "two");
         Assert.Contains("[Anime] Remux-1080p", config);
+        Assert.Contains("d1498e7d189fbe6c7110ceaabb7473e6 # WEB-2160p", config);
         Assert.Contains("d1d67249d3890e49bc12e275d989a7e9", config);
+        Assert.Contains("64fb5f9858489bdac2af690e27c8f42f # UHD Bluray + WEB", config);
     }
 
     [Fact]

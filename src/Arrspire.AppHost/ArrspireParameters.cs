@@ -38,11 +38,13 @@ internal sealed record ArrspireParameters(
     IResourceBuilder<ParameterResource> LegendasNetUser,
     IResourceBuilder<ParameterResource> LegendasNetPassword)
 {
+    internal const string DefaultVpnCountries = "Brazil";
+
     public static ArrspireParameters AddTo(IDistributedApplicationBuilder builder)
         => new(
             Plain(builder, "vpn-provider", "protonvpn"),
             builder.AddParameter("vpn-wireguard-key", secret: true),
-            Plain(builder, "vpn-countries", "Netherlands"),
+            Plain(builder, "vpn-countries", DefaultVpnCountries),
             Plain(builder, "timezone", "America/Sao_Paulo"),
             Plain(builder, "jellyfin-admin-user", "admin"),
             Generated(builder, "jellyfin-admin-password"),

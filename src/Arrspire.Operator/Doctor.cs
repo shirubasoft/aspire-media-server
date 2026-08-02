@@ -191,7 +191,10 @@ internal static class Doctor
         var environment = new Dictionary<string, string?>
         {
             ["VPN_PROVIDER"] = Parameter(parameters, "vpn-provider", "protonvpn"),
-            ["VPN_COUNTRIES"] = Parameter(parameters, "vpn-countries", "Netherlands"),
+            ["VPN_COUNTRIES"] = Parameter(
+                parameters,
+                "vpn-countries",
+                ArrspireParameters.DefaultVpnCountries),
             ["VPN_WIREGUARD_KEY"] = Parameter(parameters, "vpn-wireguard-key", ""),
             ["TIMEZONE"] = Parameter(parameters, "timezone", "UTC"),
             ["JELLYFIN_LANGUAGE"] = Parameter(parameters, "jellyfin-language", "pt-BR"),

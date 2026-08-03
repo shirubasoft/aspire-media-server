@@ -79,6 +79,14 @@ internal static partial class PublicationValidator
             "reconciler",
             ["Services__Notifier: \"http://notifier:8080\""]);
         RequireSettings(
+            ServiceSection(compose, "gluetun"),
+            "gluetun",
+            [
+                "healthcheck:",
+                "- \"/gluetun-entrypoint\"",
+                "- \"healthcheck\"",
+            ]);
+        RequireSettings(
             ServiceSection(compose, "qbittorrent"),
             "qbittorrent",
             ["network_mode: \"service:gluetun\""]);

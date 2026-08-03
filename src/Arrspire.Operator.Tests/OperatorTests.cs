@@ -20,6 +20,7 @@ public sealed class OperatorTests
     [InlineData("      - 0.0.0.0:8443:443", 8443)]
     [InlineData("      - 127.0.0.1:443:443", 443)]
     [InlineData("      - '[::]:9443:443'", 9443)]
+    [InlineData("      - \"8443:443\"", 8443)]
     public void FirewallReadsPublishedHttpsPort(string compose, int expected)
         => Assert.Equal(expected, Firewall.PublishedHttpsPort(compose));
 
@@ -230,6 +231,14 @@ public sealed class OperatorTests
                     StringComparison.Ordinal),
                 80,
                 443));
+        Assert.Throws<InvalidOperationException>(() =>
+            PublicationValidator.Validate(
+                compose.Replace(
+                    "- \"/gluetun-entrypoint\"",
+                    "- \"/bin/false\"",
+                    StringComparison.Ordinal),
+                80,
+                443));
     }
 
     [Fact]
@@ -354,6 +363,12 @@ public sealed class OperatorTests
              reconciler:
                environment:
                  Services__Notifier: "http://notifier:8080"
+             gluetun:
+               healthcheck:
+                 test:
+                   - "CMD"
+                   - "/gluetun-entrypoint"
+                   - "healthcheck"
              qbittorrent:
                network_mode: "service:gluetun"
              prowlarr:

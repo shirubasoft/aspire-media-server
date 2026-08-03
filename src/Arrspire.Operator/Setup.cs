@@ -84,7 +84,9 @@ internal static class Setup
             : "Arrspire guided C# setup (Enter accepts the shown default)");
         var values = new Values(
             Ask("Gluetun VPN provider", Current("vpn-provider", "protonvpn")),
-            Ask("VPN exit countries", Current("vpn-countries", "Netherlands")),
+            Ask(
+                "VPN exit countries",
+                Current("vpn-countries", ArrspireParameters.DefaultVpnCountries)),
             AskSecret("WireGuard private key", Current("vpn-wireguard-key", "")),
             Ask("IANA timezone", Current("timezone", DefaultTimezone())),
             Ask("Jellyfin language", Current("jellyfin-language", "pt-BR")),

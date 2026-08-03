@@ -44,6 +44,7 @@ internal sealed class JellyfinApi(
             bazarrKey,
             seerrKey,
             cancellationToken);
+        await TriggerInitialSubtitleExtractionAsync(cancellationToken);
         await TriggerIntroSkipperAsync(cancellationToken);
     }
 
@@ -186,6 +187,7 @@ internal sealed class JellyfinApi(
             ["File Transformation"] =
                 "https://www.iamparadox.dev/jellyfin/plugins/manifest.json",
             ["Intro Skipper"] = "https://intro-skipper.org/manifest.json",
+            ["Jellyfin Stable"] = "https://repo.jellyfin.org/files/plugin/manifest.json",
             ["Bazarr"] =
                 "https://raw.githubusercontent.com/enoch85/bazarr-jellyfin/main/manifest.json",
         };
@@ -269,6 +271,11 @@ internal sealed class JellyfinApi(
                 ["BookmarksEnabled"] = true,
             },
             cancellationToken);
+        await ReconcilePluginAsync(
+            plugins,
+            plugin => plugin.Equals("Subtitle Extract", StringComparison.OrdinalIgnoreCase),
+            SubtitleExtractDefaults(),
+            cancellationToken);
     }
 
     private async Task ReconcilePluginAsync(
@@ -313,6 +320,60 @@ internal sealed class JellyfinApi(
                 cancellationToken);
         }
     }
+
+    private async Task TriggerInitialSubtitleExtractionAsync(
+        CancellationToken cancellationToken)
+    {
+        var tasks = (await Http.JsonAsync(
+            client,
+            HttpMethod.Get,
+            baseUrl + "/ScheduledTasks",
+            headers: Headers(),
+            cancellationToken: cancellationToken)).AsArray();
+        foreach (var id in InitialSubtitleExtractionTaskIds(tasks))
+        {
+            await SendAsync(
+                HttpMethod.Post,
+                $"/ScheduledTasks/Running/{id}",
+                null,
+                Headers(),
+                cancellationToken);
+        }
+    }
+
+    internal static IReadOnlyList<string> InitialSubtitleExtractionTaskIds(JsonArray tasks)
+    {
+        string[] desiredKeys =
+        {
+            "ExtractAttachments",
+            "ExtractSubtitles",
+        };
+        return desiredKeys.Select(key => tasks.OfType<JsonObject>()
+                .FirstOrDefault(task =>
+                    string.Equals(
+                        task["Key"]?.GetValue<string>(),
+                        key,
+                        StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(
+                        task["State"]?.GetValue<string>(),
+                        "Idle",
+                        StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(
+                        task["LastExecutionResult"]?["Status"]?.GetValue<string>(),
+                        "Completed",
+                        StringComparison.OrdinalIgnoreCase))?["Id"]?.GetValue<string>())
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Cast<string>()
+            .ToArray();
+    }
+
+    internal static JsonObject SubtitleExtractDefaults()
+        => new()
+        {
+            ["ExtractionDuringLibraryScan"] = true,
+            ["IncludeTextSubtitles"] = true,
+            ["IncludeGraphicalSubtitles"] = true,
+        };
 
     private async Task TriggerIntroSkipperAsync(CancellationToken cancellationToken)
     {

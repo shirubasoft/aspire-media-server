@@ -91,29 +91,34 @@ internal static class Reconciler
             await RequiredStageAsync(
                 results,
                 [
-                    ("prowlarr", async token =>
-                    {
-                        var integrations = await new ProwlarrApi(
-                            clientFactory.CreateClient(),
-                            urls.Prowlarr,
-                            prowlarrKey).ReconcileAsync(
-                                urls.GluetunProxy,
-                                [
-                                    new("Sonarr", urls.Sonarr, sonarrKey,
-                                        [5000, 5010, 5020, 5030, 5040, 5045, 5050]),
-                                    new("Radarr", urls.Radarr, radarrKey,
-                                        [2000, 2010, 2020, 2030, 2040, 2045, 2050, 2060]),
-                                    new("Lidarr", urls.Lidarr, lidarrKey,
-                                        [3000, 3010, 3020, 3030, 3040]),
-                                ],
-                                token);
-                        publicIndexerResults = integrations.Select(result =>
-                            new ReconciliationResult(
-                                $"public-indexer:{result.Name}",
-                                false,
-                                result.Status,
-                                result.Reason)).ToArray();
-                    }),
+                    ("prowlarr", token => Retry.ExecuteAsync(
+                        async retryToken =>
+                        {
+                            var integrations = await new ProwlarrApi(
+                                clientFactory.CreateClient(),
+                                urls.Prowlarr,
+                                prowlarrKey).ReconcileAsync(
+                                    urls.GluetunProxy,
+                                    [
+                                        new("Sonarr", urls.Sonarr, sonarrKey,
+                                            [5000, 5010, 5020, 5030, 5040, 5045, 5050]),
+                                        new("Radarr", urls.Radarr, radarrKey,
+                                            [2000, 2010, 2020, 2030, 2040, 2045, 2050, 2060]),
+                                        new("Lidarr", urls.Lidarr, lidarrKey,
+                                            [3000, 3010, 3020, 3030, 3040]),
+                                    ],
+                                    retryToken);
+                            publicIndexerResults = integrations.Select(result =>
+                                new ReconciliationResult(
+                                    $"public-indexer:{result.Name}",
+                                    false,
+                                    result.Status,
+                                    result.Reason)).ToArray();
+                        },
+                        attempts: 3,
+                        initialDelay: TimeSpan.FromSeconds(2),
+                        maximumDelay: TimeSpan.FromSeconds(5),
+                        token)),
                     ("bazarr", token => new BazarrApi(
                         clientFactory.CreateClient(),
                         urls.Bazarr,

@@ -69,12 +69,12 @@ internal static class Deployment
                     ingressPorts.Https);
                 if (command == "deploy")
                 {
-                    var address = await DeploymentSupport.ReconcileHomepageDnsAsync(
+                    await DeploymentSupport.ReconcileHomepageDnsAsync(
                         Path.Combine(output, $".env.{environment}"));
                     await DeploymentSupport.VerifyHomepageAsync(
                         Path.Combine(output, "docker-compose.yaml"),
                         Path.Combine(output, $".env.{environment}"),
-                        address);
+                        "127.0.0.1");
                     await PrintStatusAsync(
                         root,
                         output,
